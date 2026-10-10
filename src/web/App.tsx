@@ -18,6 +18,7 @@ const PLAN_REFRESH_MS = 10 * 60 * 1000;
 export function App() {
   const [status, setStatus] = useState<Status | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
+  const [minMinutes, setMinMinutes] = useState<Record<Settings['activity'], number>>({ walk: 30, run: 30, cycle: 45, kids: 45 });
   const [planRes, setPlanRes] = useState<PlanResponse | null>(null);
   const [writing, setWriting] = useState(false);
   const [narrateError, setNarrateError] = useState<string | null>(null);
@@ -74,6 +75,7 @@ export function App() {
         const [st, s] = await Promise.all([client.status(), client.settings()]);
         setStatus(st);
         setSettings(s.settings);
+        setMinMinutes(s.minMinutes);
         if (s.settings.location) await loadPlan();
       } catch (e) {
         setError(
@@ -216,24 +218,26 @@ export function App() {
           <div className="stack">
             <CheckinCard checkins={checkins} launch={launchCheckin} onChanged={() => void loadPlan()} />
             {receipt && <ReceiptCard receipt={receipt} />}
-            <section className="card">
-              <h2>How this works</h2>
-              <ul className="small" style={{ paddingLeft: 18, margin: 0 }}>
-                <li>Forecast and air quality: Open-Meteo (open data), fetched with your location rounded to ~1 km.</li>
-                <li>Parks: OpenStreetMap.</li>
+            <details className="card">
+              <summary>
+                <b>How this works</b>
+              </summary>
+              <ul className="small" style={{ paddingLeft: 18, margin: '10px 0 0' }}>
+                <li>Weather and air quality come from Open-Meteo (open data), using your location rounded to about 1 km.</li>
+                <li>Parks come from OpenStreetMap.</li>
                 <li>Plain code scores every hour against <b>your</b> limits and keeps only your free hours.</li>
                 <li>
-                  {settings.model} runs locally via Ollama and only writes the words. Any number it invents is caught and the line is
+                  {settings.model} runs on this machine through Ollama and only writes the words. If it invents a number, that line is
                   replaced.
                 </li>
-                <li>Check-ins move your limits: fast when something felt bad, slowly when it felt great.</li>
+                <li>Check-ins move your limits: quickly when something felt bad, slowly when it felt great.</li>
               </ul>
               {plan && !plan.parksAvailable && (
                 <div className="muted small" style={{ marginTop: 6 }}>
                   Park suggestions are still loading from OpenStreetMap.
                 </div>
               )}
-            </section>
+            </details>
           </div>
         </div>
       )}
@@ -252,6 +256,7 @@ export function App() {
         <SettingsPanel
           settings={settings}
           status={status}
+          minMinutes={minMinutes}
           onSaved={(s) => {
             setSettings(s);
             void loadPlan();

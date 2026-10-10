@@ -1,65 +1,92 @@
+import { useState } from 'react';
 import type { TimeRange } from '../../shared/types';
 import { WEEKDAYS } from '../../shared/time';
 
-// Display Monday first; storage stays Sunday = 0.
-const ORDER = [1, 2, 3, 4, 5, 6, 0];
+const WEEKDAY_IDX = [1, 2, 3, 4, 5];
+const WEEKEND_IDX = [6, 0];
+const DAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
 
+const same = (days: TimeRange[][], idx: number[]) => idx.every((i) => JSON.stringify(days[i]) === JSON.stringify(days[idx[0]]));
+
+function RangeRow({ ranges, onChange }: { ranges: TimeRange[]; onChange: (r: TimeRange[]) => void }) {
+  return (
+    <div className="fh-ranges">
+      {ranges.map((r, i) => (
+        <span key={i} className="fh-range">
+          <input
+            type="time"
+            aria-label="From"
+            value={r.start}
+            onChange={(e) => onChange(ranges.map((x, j) => (j === i ? { ...x, start: e.target.value } : x)))}
+          />
+          –
+          <input
+            type="time"
+            aria-label="To"
+            value={r.end === '24:00' ? '23:59' : r.end}
+            onChange={(e) => onChange(ranges.map((x, j) => (j === i ? { ...x, end: e.target.value } : x)))}
+          />
+          <button className="icon-btn" aria-label="Remove slot" onClick={() => onChange(ranges.filter((_, j) => j !== i))}>
+            ✕
+          </button>
+        </span>
+      ))}
+      {ranges.length < 8 && (
+        <button className="btn ghost small" onClick={() => onChange([...ranges, { start: '18:00', end: '19:00' }])}>
+          + slot
+        </button>
+      )}
+      {!ranges.length && <span className="muted small">No free time</span>}
+    </div>
+  );
+}
+
+/**
+ * Two rows (weekdays, weekend) cover most routines. "Each day" reveals all seven,
+ * and opens automatically if the saved week already differs day to day.
+ */
 export function FreeHoursEditor({ value, onChange }: { value: TimeRange[][]; onChange: (v: TimeRange[][]) => void }) {
-  const set = (day: number, ranges: TimeRange[]) => onChange(value.map((r, i) => (i === day ? ranges : r)));
+  const uniform = same(value, WEEKDAY_IDX) && same(value, WEEKEND_IDX);
+  const [perDay, setPerDay] = useState(!uniform);
 
-  const copyTo = (from: number, days: number[]) =>
-    onChange(value.map((r, i) => (days.includes(i) ? value[from].map((x) => ({ ...x })) : r)));
+  const setDays = (idx: number[], ranges: TimeRange[]) =>
+    onChange(value.map((r, i) => (idx.includes(i) ? ranges.map((x) => ({ ...x })) : r)));
 
   return (
     <div>
-      {ORDER.map((d) => (
-        <div key={d} className="fh-day">
-          <div>
+      {perDay ? (
+        DAY_ORDER.map((d) => (
+          <div key={d} className="fh-day">
             <b>{WEEKDAYS[d].slice(0, 3)}</b>
-            {d === 1 && (
-              <div>
-                <button className="icon-btn small" title="Copy Monday to Tue–Fri" onClick={() => copyTo(1, [2, 3, 4, 5])}>
-                  ⇣ weekdays
-                </button>
-              </div>
-            )}
-            {d === 6 && (
-              <div>
-                <button className="icon-btn small" title="Copy Saturday to Sunday" onClick={() => copyTo(6, [0])}>
-                  ⇣ Sunday
-                </button>
-              </div>
-            )}
+            <RangeRow ranges={value[d]} onChange={(r) => setDays([d], r)} />
           </div>
-          <div className="fh-ranges">
-            {value[d].map((r, i) => (
-              <span key={i} className="fh-range">
-                <input
-                  type="time"
-                  value={r.start}
-                  onChange={(e) => set(d, value[d].map((x, j) => (j === i ? { ...x, start: e.target.value } : x)))}
-                />
-                –
-                <input
-                  type="time"
-                  value={r.end === '24:00' ? '23:59' : r.end}
-                  onChange={(e) => set(d, value[d].map((x, j) => (j === i ? { ...x, end: e.target.value } : x)))}
-                />
-                <button className="icon-btn" aria-label="Remove" onClick={() => set(d, value[d].filter((_, j) => j !== i))}>
-                  ✕
-                </button>
-              </span>
-            ))}
-            <button
-              className="btn ghost small"
-              onClick={() => set(d, [...value[d], { start: '18:00', end: '19:00' }])}
-              disabled={value[d].length >= 8}
-            >
-              + slot
-            </button>
+        ))
+      ) : (
+        <>
+          <div className="fh-day">
+            <b>Mon–Fri</b>
+            <RangeRow ranges={value[1]} onChange={(r) => setDays(WEEKDAY_IDX, r)} />
           </div>
-        </div>
-      ))}
+          <div className="fh-day">
+            <b>Sat–Sun</b>
+            <RangeRow ranges={value[6]} onChange={(r) => setDays(WEEKEND_IDX, r)} />
+          </div>
+        </>
+      )}
+      <label className="check small" style={{ marginTop: 8 }}>
+        <input
+          type="checkbox"
+          checked={perDay}
+          onChange={(e) => {
+            if (!e.target.checked) {
+              // Collapse back to two rows using Monday and Saturday as the templates.
+              onChange(value.map((r, i) => (WEEKDAY_IDX.includes(i) ? value[1] : WEEKEND_IDX.includes(i) ? value[6] : r).map((x) => ({ ...x }))));
+            }
+            setPerDay(e.target.checked);
+          }}
+        />
+        Different hours on different days
+      </label>
     </div>
   );
 }

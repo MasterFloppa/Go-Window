@@ -4,6 +4,7 @@ import { Timeline } from './Timeline';
 
 const WORD: Record<Activity, string> = { walk: 'walk', run: 'run', cycle: 'ride', kids: 'outdoor play' };
 
+/** Three chips that always matter, plus one more only when UV, humidity or wind is the concern. */
 export function Conditions({ w }: { w: GoWindow }) {
   const s = w.summary;
   const lim = w.limiting;
@@ -13,20 +14,42 @@ export function Conditions({ w }: { w: GoWindow }) {
     <div className="chips">
       <span className={cls('heat')}>🌡 feels {feelsText(s)}</span>
       <span className={cls('air')}>🫁 {s.pm25Max === null ? 'air n/a' : `PM2.5 ≤ ${s.pm25Max}`}</span>
-      <span className={cls('rain')}>☔ rain ≤ {s.rainProbMax}%</span>
-      <span className={cls('uv')}>☀ UV ≤ {s.uvMax}</span>
-      <span className={cls('humidity')}>💧 {s.humidityMax}%</span>
-      <span className={cls('wind')}>🍃 gusts {s.gustMax} km/h</span>
+      <span className={cls('rain')}>☔ rain {s.rainProbMax}%</span>
+      {warnKey === 'uv' && <span className="chip warn">☀ UV {s.uvMax}</span>}
+      {warnKey === 'humidity' && <span className="chip warn">💧 {s.humidityMax}%</span>}
+      {warnKey === 'wind' && <span className="chip warn">🍃 gusts {s.gustMax} km/h</span>}
+      {warnKey === 'dark' && <span className="chip warn">🌙 after dark</span>}
     </div>
   );
 }
 
-function WindowRow({ w, timezone, activity }: { w: GoWindow; timezone: string; activity: Activity }) {
+function CalendarButton({ w, timezone, activity }: { w: GoWindow; timezone: string; activity: Activity }) {
   return (
-    <div className={`window-row ${w.best ? 'best' : ''}`}>
-      <div>
-        <div className="window-time">
-          {w.start}–{w.end} <span className="muted small">· {fmtMinutes(w.minutes)} · score {w.score}</span>
+    <button className="icon-btn" onClick={() => downloadIcs(w, timezone, WORD[activity])} title="Add to calendar" aria-label="Add to calendar">
+      📅
+    </button>
+  );
+}
+
+function WindowRow({ w, timezone, activity }: { w: GoWindow; timezone: string; activity: Activity }) {
+  if (!w.best) {
+    return (
+      <div className="window-row compact">
+        <span>
+          <b>{w.start}–{w.end}</b> <span className="muted small">· {fmtMinutes(w.minutes)} · feels {feelsText(w.summary)}</span>
+        </span>
+        <CalendarButton w={w} timezone={timezone} activity={activity} />
+      </div>
+    );
+  }
+  return (
+    <div className="window-row best">
+      <div style={{ flex: 1 }}>
+        <div className="spread">
+          <div className="window-time">
+            {w.start}–{w.end} <span className="muted small">· {fmtMinutes(w.minutes)}</span>
+          </div>
+          <CalendarButton w={w} timezone={timezone} activity={activity} />
         </div>
         <Conditions w={w} />
         {w.park && (
@@ -39,9 +62,6 @@ function WindowRow({ w, timezone, activity }: { w: GoWindow; timezone: string; a
           </div>
         )}
       </div>
-      <button className="btn ghost small" onClick={() => downloadIcs(w, timezone, WORD[activity])} title="Block this time in your calendar">
-        + Calendar
-      </button>
     </div>
   );
 }
@@ -67,8 +87,8 @@ export function DayCard({
           {day.label} <span className="muted small">{shortDate(day.date)}</span>
         </h2>
         {story && (
-          <span className={`badge ${story.source === 'gemma' ? 'gemma' : ''}`} title={story.source === 'gemma' ? 'Written by local Gemma, numbers checked against the plan' : 'Deterministic text'}>
-            {story.source === 'gemma' ? 'Gemma · checked' : writing ? 'template' : 'template'}
+          <span className={`badge ${story.source === 'gemma' ? 'gemma' : ''}`} title={story.source === 'gemma' ? 'Written by local Gemma; every number checked against the plan' : 'Plain template text'}>
+            {story.source === 'gemma' ? 'Gemma · checked' : 'template'}
           </span>
         )}
       </div>
@@ -94,7 +114,7 @@ export function DayCard({
 
       {day.betterElsewhere && (
         <div className="elsewhere">
-          💡 If you can move things: <b>{day.betterElsewhere.start}–{day.betterElsewhere.end}</b> scores {day.betterElsewhere.score}
+          💡 If you can move things: <b>{day.betterElsewhere.start}–{day.betterElsewhere.end}</b> looks better
           {day.betterElsewhere.park ? ` (${day.betterElsewhere.park.name})` : ''}.
         </div>
       )}

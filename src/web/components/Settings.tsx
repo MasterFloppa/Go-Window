@@ -5,6 +5,8 @@ import { ACTIVITIES } from '../format';
 import { FreeHoursEditor } from './FreeHours';
 import { LocationPicker } from './LocationPicker';
 
+const MIN_OPTIONS = [15, 20, 30, 45, 60, 90];
+
 export function ActivityPicker({ value, onChange }: { value: Settings['activity']; onChange: (a: Settings['activity']) => void }) {
   return (
     <div className="chips">
@@ -17,21 +19,23 @@ export function ActivityPicker({ value, onChange }: { value: Settings['activity'
   );
 }
 
-function NotifySection({ s, setS, status }: { s: Settings; setS: (s: Settings) => void; status: Status | null }) {
+type Msg = { ok: boolean; text: string } | null;
+
+function PhoneAlerts({ s, setS, saved, dirty }: { s: Settings; setS: (s: Settings) => void; saved: Settings; dirty: boolean }) {
   const [qr, setQr] = useState<{ url: string; svg: string } | null>(null);
-  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [msg, setMsg] = useState<Msg>(null);
   const n = s.notify;
   const setN = (patch: Partial<Settings['notify']>) => setS({ ...s, notify: { ...n, ...patch } });
 
   useEffect(() => {
     client.qr().then(setQr).catch(() => setQr(null));
-  }, [n.topic, n.server]);
+  }, [saved.notify.topic, saved.notify.server]);
 
-  const run = async (fn: () => Promise<unknown>, ok: string) => {
+  const test = async () => {
     setMsg(null);
     try {
-      await fn();
-      setMsg({ ok: true, text: ok });
+      await client.testNotify();
+      setMsg({ ok: true, text: 'Sent. It should pop up on your phone in a few seconds.' });
     } catch (e) {
       setMsg({ ok: false, text: (e as Error).message });
     }
@@ -39,89 +43,148 @@ function NotifySection({ s, setS, status }: { s: Settings; setS: (s: Settings) =
 
   return (
     <section className="card">
-      <h2>Phone notifications</h2>
-      <div className="muted small">
-        Uses <a href="https://ntfy.sh" target="_blank" rel="noreferrer">ntfy</a>, an open-source push service. Install the ntfy app
-        (Android or iOS), tap “+”, and subscribe to your private topic below (or scan the code). Alerts are scheduled on the ntfy
-        server, so they still arrive if this laptop is asleep.
+      <div className="spread">
+        <h2>Phone alerts</h2>
+        <label className="check">
+          <input type="checkbox" checked={n.enabled} onChange={(e) => setN({ enabled: e.target.checked })} />
+          On
+        </label>
       </div>
-      <div className="row" style={{ alignItems: 'flex-start', marginTop: 10 }}>
-        {qr && <div className="qr" dangerouslySetInnerHTML={{ __html: qr.svg }} />}
-        <div className="stack" style={{ flex: 1, minWidth: 240, gap: 8 }}>
-          <label className="check">
-            <input type="checkbox" checked={n.enabled} onChange={(e) => setN({ enabled: e.target.checked })} />
-            Send notifications to my phone
-          </label>
-          <label className="field">
-            Topic (treat it like a password)
-            <input type="text" value={n.topic} onChange={(e) => setN({ topic: e.target.value })} />
-          </label>
-          <label className="field">
-            ntfy server
-            <input type="url" value={n.server} onChange={(e) => setN({ server: e.target.value })} />
-          </label>
-          <div className="row">
-            <label className="field" style={{ width: 140 }}>
-              Morning digest
-              <input type="time" value={n.digestTime} onChange={(e) => setN({ digestTime: e.target.value })} />
-            </label>
-            <label className="field" style={{ width: 160 }}>
-              Nudge before window (min)
-              <input type="number" min={0} max={60} value={n.leadMinutes} onChange={(e) => setN({ leadMinutes: Number(e.target.value) })} />
-            </label>
-          </div>
-          <label className="check">
-            <input type="checkbox" checked={n.checkin} onChange={(e) => setN({ checkin: e.target.checked })} />
-            Ask “how was it?” after each window
-          </label>
-          <label className="field">
-            Link for check-in buttons (an address your phone can reach)
-            <input type="url" placeholder="http://192.168.1.20:8787" value={n.publicUrl} onChange={(e) => setN({ publicUrl: e.target.value })} />
-          </label>
-          {status?.lanUrls.length ? (
-            <div className="small muted">
-              On this Wi-Fi:{' '}
-              {status.lanUrls.map((u) => (
-                <button key={u} className="chip" onClick={() => setN({ publicUrl: u })}>
-                  {u}
+      <div className="muted small">A morning digest, a nudge when your window opens, and a one-tap “how was it?” afterwards.</div>
+      {n.enabled && (
+        <div className="row" style={{ alignItems: 'flex-start', marginTop: 10, gap: 16 }}>
+          {qr && <div className="qr" dangerouslySetInnerHTML={{ __html: qr.svg }} />}
+          <ol className="small" style={{ margin: 0, paddingLeft: 18, flex: 1, minWidth: 220 }}>
+            <li>
+              Install the free, open-source{' '}
+              <a href="https://ntfy.sh" target="_blank" rel="noreferrer">
+                ntfy
+              </a>{' '}
+              app.
+            </li>
+            <li>
+              Tap + and subscribe to <code>{saved.notify.topic}</code> (or scan the code). Keep it private.
+            </li>
+            <li>Save settings, then send a test.</li>
+            <li style={{ listStyle: 'none', marginTop: 8 }}>
+              <div className="row">
+                <label className="field" style={{ width: 150 }}>
+                  Morning digest at
+                  <input type="time" value={n.digestTime} onChange={(e) => setN({ digestTime: e.target.value })} />
+                </label>
+                <button className="btn ghost small" onClick={test} disabled={dirty} title={dirty ? 'Save first' : ''}>
+                  Send test
                 </button>
-              ))}{' '}
-              Start with <code>npm run start:lan</code> so your phone can open it.
-            </div>
-          ) : null}
-          <div className="row">
-            <button className="btn ghost small" onClick={() => run(() => client.testNotify(), 'Test sent. Check your phone.')}>
-              Send test (saved topic)
-            </button>
-            <button className="btn ghost small" onClick={() => run(() => client.syncNotify(), 'Schedule synced with ntfy.')}>
-              Sync schedule now
-            </button>
-          </div>
-          {status?.notify.lastSync && (
-            <div className="muted small">
-              Last sync {new Date(status.notify.lastSync.at).toLocaleTimeString()} · {status.notify.scheduled} scheduled
-              {status.notify.lastSync.result.errors.length ? ` · ${status.notify.lastSync.result.errors.length} errors` : ''}
-            </div>
-          )}
-          {msg && <div className={`banner ${msg.ok ? 'ok' : 'error'}`}>{msg.text}</div>}
+              </div>
+            </li>
+          </ol>
         </div>
-      </div>
+      )}
+      {msg && <div className={`banner ${msg.ok ? 'ok' : 'error'}`} style={{ marginTop: 8 }}>{msg.text}</div>}
     </section>
+  );
+}
+
+function Advanced({ s, setS, status, minDefault }: { s: Settings; setS: (s: Settings) => void; status: Status | null; minDefault: number }) {
+  const [msg, setMsg] = useState<Msg>(null);
+  const n = s.notify;
+  const setN = (patch: Partial<Settings['notify']>) => setS({ ...s, notify: { ...n, ...patch } });
+
+  const sync = async () => {
+    setMsg(null);
+    try {
+      const r = await client.syncNotify();
+      setMsg({ ok: !r.errors.length, text: r.errors.length ? r.errors.join('; ') : `Synced: ${r.published.length} scheduled, ${r.cancelled.length} cancelled.` });
+    } catch (e) {
+      setMsg({ ok: false, text: (e as Error).message });
+    }
+  };
+
+  return (
+    <details className="card advanced">
+      <summary>
+        <b>Advanced</b> <span className="muted small">window length, alert timing, phone link, ntfy server, local model</span>
+      </summary>
+      <div className="adv-grid">
+        <label className="field">
+          Shortest window worth going
+          <select
+            value={s.minMinutes ?? ''}
+            onChange={(e) => setS({ ...s, minMinutes: e.target.value === '' ? null : Number(e.target.value) })}
+          >
+            <option value="">Auto for activity ({minDefault} min)</option>
+            {MIN_OPTIONS.map((m) => (
+              <option key={m} value={m}>
+                {m} min
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="field">
+          Nudge before a window opens (min)
+          <input type="number" min={0} max={60} value={n.leadMinutes} onChange={(e) => setN({ leadMinutes: Number(e.target.value) })} />
+        </label>
+        <label className="check" style={{ alignSelf: 'end' }}>
+          <input type="checkbox" checked={n.checkin} onChange={(e) => setN({ checkin: e.target.checked })} />
+          Ask “how was it?” after each window
+        </label>
+        <label className="field">
+          Ollama model
+          <input type="text" value={s.model} onChange={(e) => setS({ ...s, model: e.target.value })} />
+          <span className="small">
+            {status?.ollama.up ? `Available: ${status.ollama.models.join(', ') || 'none'}` : 'Ollama not reachable; plans still work with template text.'}
+          </span>
+        </label>
+        <label className="field wide">
+          Link for phone check-in buttons
+          <input type="url" placeholder="http://192.168.1.20:8787" value={n.publicUrl} onChange={(e) => setN({ publicUrl: e.target.value })} />
+          <span className="small">
+            Lets the notification buttons open this app on your phone (same Wi-Fi). Run <code>npm run start:lan</code>.
+            {status?.lanUrls.map((u) => (
+              <button key={u} className="chip" style={{ marginLeft: 6 }} onClick={() => setN({ publicUrl: u })}>
+                use {u}
+              </button>
+            ))}
+          </span>
+        </label>
+        <label className="field">
+          ntfy server
+          <input type="url" value={n.server} onChange={(e) => setN({ server: e.target.value })} />
+        </label>
+        <label className="field">
+          ntfy topic (acts like a password)
+          <input type="text" value={n.topic} onChange={(e) => setN({ topic: e.target.value })} />
+        </label>
+      </div>
+      <div className="row" style={{ marginTop: 10 }}>
+        <button className="btn ghost small" onClick={sync}>
+          Sync alert schedule now
+        </button>
+        {status?.notify.lastSync && (
+          <span className="muted small">
+            Last sync {new Date(status.notify.lastSync.at).toLocaleTimeString()} · {status.notify.scheduled} scheduled
+          </span>
+        )}
+      </div>
+      {msg && <div className={`banner ${msg.ok ? 'ok' : 'error'}`} style={{ marginTop: 8 }}>{msg.text}</div>}
+    </details>
   );
 }
 
 export function SettingsPanel({
   settings,
   status,
+  minMinutes,
   onSaved,
 }: {
   settings: Settings;
   status: Status | null;
+  minMinutes: Record<Settings['activity'], number>;
   onSaved: (s: Settings) => void;
 }) {
   const [s, setS] = useState<Settings>(settings);
   const [saving, setSaving] = useState(false);
-  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [msg, setMsg] = useState<Msg>(null);
   const dirty = JSON.stringify(s) !== JSON.stringify(settings);
 
   useEffect(() => setS(settings), [settings]);
@@ -132,7 +195,7 @@ export function SettingsPanel({
     try {
       const r = await client.saveSettings(s);
       onSaved(r.settings);
-      setMsg({ ok: true, text: 'Saved. Plan and notifications updated.' });
+      setMsg({ ok: true, text: 'Saved. Your plan and alerts are updated.' });
     } catch (e) {
       setMsg({ ok: false, text: (e as Error).message });
     } finally {
@@ -142,19 +205,19 @@ export function SettingsPanel({
 
   return (
     <div className="stack">
-      <div className="spread" style={{ position: 'sticky', top: 0, zIndex: 2, background: 'var(--bg)', padding: '6px 0' }}>
+      <div className="savebar">
         <span className="muted small">{dirty ? 'Unsaved changes' : 'All changes saved'}</span>
         <button className="btn" onClick={save} disabled={!dirty || saving}>
-          {saving ? 'Saving…' : 'Save settings'}
+          {saving ? 'Saving…' : 'Save'}
         </button>
       </div>
       {msg && <div className={`banner ${msg.ok ? 'ok' : 'error'}`}>{msg.text}</div>}
 
       <div className="grid-2">
         <section className="card">
-          <h2>Your free hours</h2>
-          <div className="muted small">
-            The only times Go Window will suggest. Be honest: a 7:00–7:45 slot you actually have beats a 2-hour slot you don't.
+          <h2>When are you free?</h2>
+          <div className="muted small" style={{ marginBottom: 6 }}>
+            Go Window only suggests times inside these slots.
           </div>
           <FreeHoursEditor value={s.freeHours} onChange={(freeHours) => setS({ ...s, freeHours })} />
         </section>
@@ -169,29 +232,18 @@ export function SettingsPanel({
             <ActivityPicker value={s.activity} onChange={(activity) => setS({ ...s, activity })} />
             <label className="check">
               <input type="checkbox" checked={s.sensitive} onChange={(e) => setS({ ...s, sensitive: e.target.checked })} />
-              I'm sensitive to heat or air (asthma, pregnancy, older age)
+              Sensitive to heat or air (asthma, pregnancy, older age)
             </label>
             <label className="check" style={{ marginTop: 6 }}>
               <input type="checkbox" checked={s.darkOk} onChange={(e) => setS({ ...s, darkOk: e.target.checked })} />
               Going out after dark is fine
             </label>
           </section>
-          <section className="card">
-            <h2>Local model</h2>
-            <label className="field">
-              Ollama model
-              <input type="text" value={s.model} onChange={(e) => setS({ ...s, model: e.target.value })} />
-            </label>
-            <div className="muted small" style={{ marginTop: 6 }}>
-              {status?.ollama.up
-                ? `Ollama is running with ${status.ollama.models.join(', ') || 'no models'}.`
-                : 'Ollama is not reachable. Plans still work; text falls back to templates.'}
-            </div>
-          </section>
         </div>
       </div>
 
-      <NotifySection s={s} setS={setS} status={status} />
+      <PhoneAlerts s={s} setS={setS} saved={settings} dirty={dirty} />
+      <Advanced s={s} setS={setS} status={status} minDefault={minMinutes[s.activity]} />
     </div>
   );
 }

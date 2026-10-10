@@ -403,6 +403,52 @@ button.chip.on {
   background: #f3fbf5;
 }
 
+.window-row.compact {
+  padding: 6px 12px;
+  font-size: 0.92rem;
+}
+
+.savebar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg);
+  padding: 6px 0;
+}
+
+details.card > summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+details.card > summary::-webkit-details-marker {
+  display: none;
+}
+
+details.card > summary::before {
+  content: '▸ ';
+  color: var(--muted);
+}
+
+details.card[open] > summary::before {
+  content: '▾ ';
+}
+
+.adv-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  margin-top: 12px;
+}
+
+.adv-grid .wide {
+  grid-column: 1 / -1;
+}
+
 .window-time {
   font-weight: 700;
   font-size: 1.05rem;
