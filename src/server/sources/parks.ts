@@ -9,6 +9,7 @@ const MIRRORS = [
 
 const RADIUS_M = 3000;
 const WALK_KMH = 4.8;
+const USER_AGENT = 'go-window/0.1 (+https://github.com/MasterFloppa/Go-Window)';
 
 interface OverpassElement {
   tags?: Record<string, string>;
@@ -37,26 +38,50 @@ export async function findParks(lat: number, lon: number): Promise<Park[]> {
 );
 out center tags 60;`;
 
-  let lastError: unknown = null;
+  const errors: string[] = [];
   for (const mirror of MIRRORS) {
     try {
       const res = await fetch(mirror, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
-          'User-Agent': 'go-window/0.1 (+https://github.com/MasterFloppa/Go-Window)',
+          'User-Agent': USER_AGENT,
         },
         body: new URLSearchParams({ data: query }),
-        signal: AbortSignal.timeout(14000),
+        signal: AbortSignal.timeout(20000),
       });
-      if (!res.ok) throw new Error(`${new URL(mirror).host} responded ${res.status}`);
+      if (!res.ok) throw new Error(`responded ${res.status}`);
       const json = (await res.json()) as { elements: OverpassElement[] };
       return toParks(json.elements, la, lo);
     } catch (err) {
-      lastError = err;
+      errors.push(`${new URL(mirror).host}: ${(err as Error).message}`);
     }
   }
-  throw lastError instanceof Error ? lastError : new Error('All Overpass mirrors failed');
+  try {
+    return await viaNominatim(la, lo);
+  } catch (err) {
+    errors.push(`nominatim: ${(err as Error).message}`);
+  }
+  throw new Error(`No park source reachable (${errors.join('; ')})`);
+}
+
+/** Fallback: Nominatim keyword search bounded to a box around the location. Results are cached for a week. */
+async function viaNominatim(lat: number, lon: number): Promise<Park[]> {
+  const d = RADIUS_M / 111000;
+  const viewbox = [lon - d, lat + d, lon + d, lat - d].map((n) => n.toFixed(4)).join(',');
+  const res = await fetch(
+    `https://nominatim.openstreetmap.org/search?q=park&format=jsonv2&limit=40&bounded=1&viewbox=${viewbox}`,
+    { headers: { 'User-Agent': USER_AGENT }, signal: AbortSignal.timeout(15000) },
+  );
+  if (!res.ok) throw new Error(`responded ${res.status}`);
+  const rows = (await res.json()) as { name: string; lat: string; lon: string; category: string; type: string }[];
+  return toParks(
+    rows
+      .filter((r) => r.category === 'leisure' && ['park', 'garden', 'nature_reserve'].includes(r.type))
+      .map((r) => ({ tags: { name: r.name, leisure: r.type }, lat: Number(r.lat), lon: Number(r.lon) })),
+    lat,
+    lon,
+  );
 }
 
 function toParks(elements: OverpassElement[], lat: number, lon: number): Park[] {
