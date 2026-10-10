@@ -6,6 +6,7 @@ export interface Forecast {
   utcOffsetSeconds: number;
   hours: HourConditions[];
   daylight: Record<string, { sunrise: string; sunset: string }>;
+  airAvailable: boolean;
   fetchedAt: number;
 }
 
@@ -38,14 +39,27 @@ interface GeocodeResponse {
 
 const FORECAST_DAYS = 3;
 const CACHE_MS = 30 * 60 * 1000;
+/** If air quality failed, retry soon rather than planning without it for half an hour. */
+const PARTIAL_CACHE_MS = 3 * 60 * 1000;
 const cache = new Map<string, Forecast>();
+
+async function fetchAir(url: string): Promise<AirResponse | null> {
+  for (const timeoutMs of [15000, 25000]) {
+    try {
+      return await fetchJson<AirResponse>(url, { timeoutMs });
+    } catch (err) {
+      console.warn(`[air] ${(err as Error).message}`);
+    }
+  }
+  return null;
+}
 
 export async function getForecast(lat: number, lon: number, force = false): Promise<Forecast> {
   const la = coarse(lat);
   const lo = coarse(lon);
   const key = `${la},${lo}`;
   const hit = cache.get(key);
-  if (!force && hit && Date.now() - hit.fetchedAt < CACHE_MS) return hit;
+  if (!force && hit && Date.now() - hit.fetchedAt < (hit.airAvailable ? CACHE_MS : PARTIAL_CACHE_MS)) return hit;
 
   const hourlyWeather = [
     'temperature_2m',
@@ -65,9 +79,7 @@ export async function getForecast(lat: number, lon: number, force = false): Prom
     fetchJson<ForecastResponse>(
       `https://api.open-meteo.com/v1/forecast?${common}&hourly=${hourlyWeather}&daily=sunrise,sunset`,
     ),
-    fetchJson<AirResponse>(`https://air-quality-api.open-meteo.com/v1/air-quality?${common}&hourly=pm2_5,pm10,us_aqi`).catch(
-      () => null,
-    ),
+    fetchAir(`https://air-quality-api.open-meteo.com/v1/air-quality?${common}&hourly=pm2_5,pm10,us_aqi`),
   ]);
 
   const airByTime = new Map<string, { pm25: number | null; pm10: number | null; usAqi: number | null }>();
@@ -108,6 +120,7 @@ export async function getForecast(lat: number, lon: number, force = false): Prom
     utcOffsetSeconds: wx.utc_offset_seconds,
     hours,
     daylight,
+    airAvailable: !!air,
     fetchedAt: Date.now(),
   };
   cache.set(key, forecast);
