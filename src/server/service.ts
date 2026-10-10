@@ -45,6 +45,7 @@ export class GoWindowService {
   private narrating: { hash: string; promise: Promise<Narrative> } | null = null;
   private parksInFlight: Promise<void> | null = null;
   private parksFailedAt = 0;
+  private syncChain: Promise<unknown> = Promise.resolve();
   lastSync: { at: string; result: SyncResult } | null = null;
 
   constructor(
@@ -241,6 +242,13 @@ export class GoWindowService {
   }
 
   async syncNotifications(): Promise<SyncResult> {
+    // Saving settings and the background refresh can both trigger a sync; run them one at a time.
+    const run = this.syncChain.then(() => this.doSync());
+    this.syncChain = run.catch(() => undefined);
+    return run;
+  }
+
+  private async doSync(): Promise<SyncResult> {
     const n = this.settings.notify;
     const nowS = Math.floor(Date.now() / 1000);
     let desired: ReturnType<typeof desiredNotifications> = [];
