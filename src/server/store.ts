@@ -49,6 +49,7 @@ export function defaultSettings(): Settings {
     activity: 'walk',
     sensitive: false,
     darkOk: true,
+    minMinutes: null,
     freeHours: [weekend, weekday, weekday, weekday, weekday, weekday, weekend].map((d) => d.map((r) => ({ ...r }))),
     notify: {
       enabled: false,

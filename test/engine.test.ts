@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import type { FeedbackEntry, HourConditions, Settings } from '../src/shared/types.js';
 import { localToEpochSeconds, nowInTimezone } from '../src/shared/time.js';
 import { allowedNumbers, ungroundedNumbers } from '../src/server/ai/grounding.js';
-import { parseByKeywords } from '../src/server/ai/feedbackParse.js';
-import { applyFeedback, initialLearning } from '../src/server/engine/learn.js';
+import { parseByKeywords, verifyFeelings } from '../src/server/ai/feedbackParse.js';
+import { applyFeedback, initialLearning, MAX_STEP } from '../src/server/engine/learn.js';
 import { DEFAULT_LIMITS, effectiveLimits } from '../src/server/engine/limits.js';
 import { buildPlan } from '../src/server/engine/plan.js';
 import { scoreHour } from '../src/server/engine/score.js';
@@ -187,6 +187,11 @@ describe('applyFeedback', () => {
     expect(skipped).toBeLessThan(35);
   });
 
+  it('never moves a limit more than one step per check-in', () => {
+    const { state } = applyFeedback(initialLearning(), entry({ feelings: ['too_cold'], conditions: { feels: 30, feelsMin: 30, pm25: 10, humidity: 60, uv: 2, rainProb: 0, gust: 10 } }), 'walk', false);
+    expect(state.base.minFeels - DEFAULT_LIMITS.minFeels).toBeLessThanOrEqual(MAX_STEP.minFeels);
+  });
+
   it('never leaves the guard rails', () => {
     let state = initialLearning();
     for (let i = 0; i < 30; i++) {
@@ -205,6 +210,29 @@ describe('grounding', () => {
 
   it('flags invented numbers', () => {
     expect(ungroundedNumbers('Feels like 31°C, walk 5 km.', allowedNumbers(facts))).toEqual(['31', '5']);
+  });
+});
+
+describe('verifyFeelings', () => {
+  const note = 'Went to the lake but it was so muggy and the traffic smoke had me coughing';
+
+  it('keeps feelings backed by a real quote', () => {
+    expect(
+      verifyFeelings(note, [
+        { feeling: 'too_humid', quote: 'so muggy' },
+        { feeling: 'air_bad', quote: 'smoke had me coughing' },
+      ]).sort(),
+    ).toEqual(['air_bad', 'too_humid']);
+  });
+
+  it('drops feelings with invented quotes or a reused quote that does not fit', () => {
+    expect(
+      verifyFeelings(note, [
+        { feeling: 'too_humid', quote: 'muggy' },
+        { feeling: 'too_cold', quote: 'muggy' },
+        { feeling: 'too_hot', quote: 'it was boiling' },
+      ]),
+    ).toEqual(['too_humid']);
   });
 });
 

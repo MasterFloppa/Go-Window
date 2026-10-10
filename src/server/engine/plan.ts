@@ -28,7 +28,7 @@ function pickPark(w: GoWindow, parks: Park[] | null): Park | null {
 export function buildPlan({ settings, forecast, parks, base, now = new Date() }: PlanInput): Plan {
   if (!settings.location) throw new Error('Location is not set');
   const limits = effectiveLimits(base, settings.activity, settings.sensitive);
-  const minMinutes = MIN_MINUTES[settings.activity];
+  const minMinutes = settings.minMinutes ?? MIN_MINUTES[settings.activity];
   const nowLocal = nowInTimezone(forecast.timezone, now);
   const today = datePart(nowLocal);
   const nowMin = toMinutes(timePart(nowLocal));

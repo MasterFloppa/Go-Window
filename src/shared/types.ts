@@ -42,6 +42,8 @@ export interface Settings {
   activity: Activity;
   sensitive: boolean;
   darkOk: boolean;
+  /** Shortest window worth suggesting, in minutes; null uses the activity default. */
+  minMinutes: number | null;
   /** Index 0 = Sunday ... 6 = Saturday. */
   freeHours: TimeRange[][];
   notify: NotifySettings;
