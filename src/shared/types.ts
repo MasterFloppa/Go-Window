@@ -138,6 +138,8 @@ export interface DayPlan {
   nearMisses: NearMiss[];
   /** A clearly better slot outside the free hours, if one exists. */
   betterElsewhere: GoWindow | null;
+  /** Free minutes still ahead on this day (0 once today's free hours have passed). */
+  freeLeftMinutes: number;
   sunrise: string | null;
   sunset: string | null;
 }
@@ -151,6 +153,7 @@ export interface Plan {
   minMinutes: number;
   days: DayPlan[];
   parksAvailable: boolean;
+  airAvailable: boolean;
   hash: string;
 }
 
@@ -160,10 +163,14 @@ export interface DayStory {
   why: string;
   idea: string;
   source: 'gemma' | 'template';
+  /** Fingerprint of the facts this story was written from, so unchanged days are not regenerated. */
+  factsHash?: string;
 }
 
 export interface Narrative {
   hash: string;
+  /** Bumped when the prompt changes so stale stories are regenerated. */
+  promptVersion: number;
   model: string | null;
   days: DayStory[];
   generatedAt: string;

@@ -14,7 +14,7 @@ import type {
 } from '../shared/types.js';
 import { addDays, datePart, nowInTimezone, toMinutes } from '../shared/time.js';
 import { parseNote } from './ai/feedbackParse.js';
-import { narratePlan } from './ai/narrate.js';
+import { narratePlan, PROMPT_VERSION } from './ai/narrate.js';
 import { ollamaHealth } from './ai/ollama.js';
 import { applyFeedback } from './engine/learn.js';
 import { effectiveLimits } from './engine/limits.js';
@@ -117,7 +117,7 @@ export class GoWindowService {
 
   cachedNarrative(plan: Plan): Narrative | null {
     const n = this.store.data.narrative;
-    return n && n.hash === plan.hash ? n : null;
+    return n && n.hash === plan.hash && n.promptVersion === PROMPT_VERSION ? n : null;
   }
 
   isNarrating(hash: string): boolean {
@@ -128,7 +128,7 @@ export class GoWindowService {
     const cached = this.cachedNarrative(plan);
     if (cached) return Promise.resolve(cached);
     if (this.narrating?.hash === plan.hash) return this.narrating.promise;
-    const promise = narratePlan(plan, this.settings.model)
+    const promise = narratePlan(plan, this.settings.model, this.store.data.narrative)
       .then((n) => {
         this.store.update((d) => void (d.narrative = n));
         return n;

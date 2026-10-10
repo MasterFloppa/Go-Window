@@ -66,6 +66,10 @@ export function buildPlan({ settings, forecast, parks, base, now = new Date() }:
     const betterElsewhere =
       topElsewhere && topElsewhere.score >= (best?.score ?? 0) + ELSEWHERE_MARGIN ? topElsewhere : null;
     if (betterElsewhere) betterElsewhere.park = pickPark(betterElsewhere, parks);
+    const freeLeftMinutes = free.reduce(
+      (sum, r) => sum + Math.max(0, toMinutes(r.end) - Math.max(toMinutes(r.start), clip ?? 0)),
+      0,
+    );
 
     days.push({
       date,
@@ -76,6 +80,7 @@ export function buildPlan({ settings, forecast, parks, base, now = new Date() }:
       windows,
       nearMisses,
       betterElsewhere,
+      freeLeftMinutes,
       sunrise: forecast.daylight[date]?.sunrise ?? null,
       sunset: forecast.daylight[date]?.sunset ?? null,
     });
@@ -84,7 +89,9 @@ export function buildPlan({ settings, forecast, parks, base, now = new Date() }:
   const fingerprint = JSON.stringify({
     limits,
     activity: settings.activity,
+    air: forecast.airAvailable,
     days: days.map((d) => ({
+      f: d.freeLeftMinutes > 0,
       w: d.windows.map((w) => [w.id, w.score, w.summary, w.park?.name]),
       m: d.nearMisses.map((m) => [m.start, m.end, m.reason]),
       e: d.betterElsewhere?.id,
@@ -100,6 +107,7 @@ export function buildPlan({ settings, forecast, parks, base, now = new Date() }:
     minMinutes,
     days,
     parksAvailable: !!parks?.length,
+    airAvailable: forecast.airAvailable,
     hash: createHash('sha1').update(fingerprint).digest('hex').slice(0, 12),
   };
 }
