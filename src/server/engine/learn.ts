@@ -5,6 +5,8 @@ import { adjustments, clampLimit, DEFAULT_LIMITS, LIMIT_LABELS } from './limits.
 const TIGHTEN = 0.6;
 const TIGHTEN_SKIPPED = 0.3;
 const LOOSEN_STEP: Partial<Record<LimitKey, number>> = { maxFeels: 0.5, minFeels: -0.5, pm25: 2, humidity: 1, uv: 0.5 };
+/** One check-in can only move a limit this far, so a single odd day (or misread note) can't wreck your plan. */
+export const MAX_STEP: Record<LimitKey, number> = { maxFeels: 3, minFeels: 3, pm25: 10, humidity: 8, uv: 2, rainProb: 15, gust: 8 };
 
 const step = (key: LimitKey) => (key === 'maxFeels' || key === 'minFeels' || key === 'uv' ? 0.5 : 1);
 const snap = (key: LimitKey, v: number) => Math.round(v / step(key)) * step(key);
@@ -76,7 +78,8 @@ export function applyFeedback(
   const changes: LimitChange[] = [];
 
   for (const p of proposals(entry, eff)) {
-    const nextEff = eff[p.key] + p.rate * (p.target - eff[p.key]);
+    const delta = Math.max(-MAX_STEP[p.key], Math.min(MAX_STEP[p.key], p.rate * (p.target - eff[p.key])));
+    const nextEff = eff[p.key] + delta;
     const nextBase = clampLimit(p.key, snap(p.key, nextEff - adj[p.key]));
     if (nextBase === base[p.key]) continue;
     changes.push({
