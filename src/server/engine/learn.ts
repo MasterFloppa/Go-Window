@@ -31,8 +31,8 @@ function proposals(entry: FeedbackEntry, eff: Limits): Proposal[] {
 
   if (f.has('too_hot') && c.feels - 1 < eff.maxFeels)
     out.push({ key: 'maxFeels', target: c.feels - 1, rate, reason: `${verb} feels-like ${Math.round(c.feels)}°C was too hot (${when})` });
-  if (f.has('too_cold') && c.feels + 1 > eff.minFeels)
-    out.push({ key: 'minFeels', target: c.feels + 1, rate, reason: `${verb} feels-like ${Math.round(c.feels)}°C was too cold (${when})` });
+  if (f.has('too_cold') && (c.feelsMin ?? c.feels) + 1 > eff.minFeels)
+    out.push({ key: 'minFeels', target: (c.feelsMin ?? c.feels) + 1, rate, reason: `${verb} feels-like ${Math.round(c.feelsMin ?? c.feels)}°C was too cold (${when})` });
   if (f.has('air_bad') && c.pm25 !== null && c.pm25 - 3 < eff.pm25)
     out.push({ key: 'pm25', target: c.pm25 - 3, rate, reason: `${verb} the air felt bad at PM2.5 ${Math.round(c.pm25)} (${when})` });
   if (f.has('too_humid') && c.humidity - 3 < eff.humidity)
@@ -47,8 +47,8 @@ function proposals(entry: FeedbackEntry, eff: Limits): Proposal[] {
   if (entry.went && f.has('great')) {
     if (c.feels >= eff.maxFeels - 1.5 && !f.has('too_hot'))
       out.push({ key: 'maxFeels', target: eff.maxFeels + LOOSEN_STEP.maxFeels!, rate: 1, reason: `${Math.round(c.feels)}°C felt great, so you handle heat a bit better (${when})` });
-    if (c.feels <= eff.minFeels + 1.5 && !f.has('too_cold'))
-      out.push({ key: 'minFeels', target: eff.minFeels + LOOSEN_STEP.minFeels!, rate: 1, reason: `${Math.round(c.feels)}°C felt great, so cooler is fine (${when})` });
+    if ((c.feelsMin ?? c.feels) <= eff.minFeels + 1.5 && !f.has('too_cold'))
+      out.push({ key: 'minFeels', target: eff.minFeels + LOOSEN_STEP.minFeels!, rate: 1, reason: `${Math.round(c.feelsMin ?? c.feels)}°C felt great, so cooler is fine (${when})` });
     if (c.pm25 !== null && c.pm25 >= eff.pm25 * 0.8 && !f.has('air_bad'))
       out.push({ key: 'pm25', target: eff.pm25 + LOOSEN_STEP.pm25!, rate: 1, reason: `PM2.5 ${Math.round(c.pm25)} felt fine (${when})` });
     if (c.humidity >= eff.humidity - 5 && !f.has('too_humid'))

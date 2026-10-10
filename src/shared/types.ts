@@ -180,6 +180,7 @@ export const SKIP_REASONS: SkipReason[] = ['busy', 'weather', 'not_feeling_it'];
 
 export interface ConditionSnapshot {
   feels: number;
+  feelsMin?: number;
   pm25: number | null;
   humidity: number;
   uv: number;
