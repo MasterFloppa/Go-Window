@@ -4,20 +4,20 @@ import { allowedNumbers, ungroundedNumbers } from './grounding.js';
 import { chatJson } from './ollama.js';
 
 export const ACTIVITY_WORD: Record<Activity, string> = { walk: 'walk', run: 'run', cycle: 'ride', kids: 'outdoor play' };
-export const PROMPT_VERSION = 2;
+export const PROMPT_VERSION = 3;
 
-function conditions(w: GoWindow): string {
+function conditions(w: GoWindow, limits: Plan['limits']): string {
   const s = w.summary;
   const feels = s.feelsMin === s.feelsMax ? `${s.feelsMin}°C` : `${s.feelsMin} to ${s.feelsMax}°C`;
-  const air = s.pm25Max === null ? 'air quality unknown' : `PM2.5 up to ${s.pm25Max} µg/m³`;
-  return `feels like ${feels}, ${air}, rain chance up to ${s.rainProbMax}%, UV up to ${s.uvMax}`;
+  const air = s.pm25Max === null ? 'air quality unknown' : `PM2.5 up to ${s.pm25Max} µg/m³ (the user's limit is ${limits.pm25})`;
+  return `feels like ${feels} (the user's max is ${limits.maxFeels}°C), ${air}, rain chance up to ${s.rainProbMax}%, UV up to ${s.uvMax}`;
 }
 
 /**
  * Facts as short plain sentences. Small models misread nested JSON (e.g. treating
  * "minutes to the park" as "minutes to walk"), so every number carries its meaning inline.
  */
-export function dayFacts(d: DayPlan, activity: Activity): string {
+export function dayFacts(d: DayPlan, activity: Activity, limits: Plan['limits']): string {
   const best = d.windows.find((w) => w.best) ?? null;
   const lines = [
     `Day: ${d.label} (${d.weekday} ${d.date})`,
@@ -26,7 +26,7 @@ export function dayFacts(d: DayPlan, activity: Activity): string {
   ];
   if (best) {
     lines.push(`Best window: ${best.start}-${best.end}, which is ${best.minutes} minutes long.`);
-    lines.push(`Conditions in the best window: ${conditions(best)}.`);
+    lines.push(`Conditions in the best window: ${conditions(best, limits)}.`);
     if (best.limiting && best.limiting.penalty >= 5) lines.push(`Main thing to watch: ${best.limiting.label}.`);
     if (best.park) lines.push(`Nearby park: ${best.park.name}, reachable in ${best.park.walkMinutes} minutes on foot from home.`);
   } else {
@@ -36,7 +36,7 @@ export function dayFacts(d: DayPlan, activity: Activity): string {
   if (others.length) lines.push(`Other good windows: ${others.map((w) => `${w.start}-${w.end}`).join(', ')}.`);
   for (const m of d.nearMisses) lines.push(`Free slot ${m.start}-${m.end} does not work: ${m.reason}.`);
   if (d.betterElsewhere) {
-    lines.push(`Better time outside the free hours: ${d.betterElsewhere.start}-${d.betterElsewhere.end} (${conditions(d.betterElsewhere)}).`);
+    lines.push(`Better time outside the free hours: ${d.betterElsewhere.start}-${d.betterElsewhere.end} (${conditions(d.betterElsewhere, limits)}).`);
   }
   if (d.sunset) lines.push(`Sunset: ${d.sunset}.`);
   return lines.join('\n');
@@ -87,6 +87,7 @@ Rules:
 - Use only times, numbers and place names that appear in the facts. Never invent a number.
 - headline: at most 10 words. If there is a best window, include its start and end time.
 - why: at most 30 words. Mention at least two of the actual conditions (feels-like, PM2.5, rain chance, UV).
+  Describe air honestly relative to the user's limit: only call it clean if PM2.5 is well under half the limit.
 - idea: at most 25 words. One concrete thing to do outside in that window that suits the activity:
   something to notice, a route, or someone to bring. Encourage leaving the phone in a pocket.
 - The park time is how long it takes to reach the park, not how long to stay.
@@ -110,10 +111,11 @@ const factsKey = (facts: string) => createHash('sha1').update(facts).digest('hex
 async function narrateDay(
   d: DayPlan,
   activity: Activity,
+  limits: Plan['limits'],
   model: string,
   rejected: string[],
 ): Promise<DayStory> {
-  const facts = dayFacts(d, activity);
+  const facts = dayFacts(d, activity, limits);
   const allowed = allowedNumbers(facts);
   let retryNote = '';
   for (let attempt = 0; attempt < 2; attempt++) {
@@ -157,12 +159,12 @@ export async function narratePlan(plan: Plan, model: string, previous: Narrative
       days.push(templateStory(d, plan.activity));
       continue;
     }
-    const key = factsKey(dayFacts(d, plan.activity));
+    const key = factsKey(dayFacts(d, plan.activity, plan.limits));
     const reuse =
       previous?.promptVersion === PROMPT_VERSION
         ? previous.days.find((s) => s.date === d.date && s.factsHash === key && s.source === 'gemma')
         : undefined;
-    days.push(reuse ?? (await narrateDay(d, plan.activity, model, rejected)));
+    days.push(reuse ?? (await narrateDay(d, plan.activity, plan.limits, model, rejected)));
   }
   return {
     hash: plan.hash,
