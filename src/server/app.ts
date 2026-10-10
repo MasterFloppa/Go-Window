@@ -8,7 +8,7 @@ import { templateNarrative } from './ai/narrate.js';
 import { initialLearning, setLimitManually } from './engine/learn.js';
 import { adjustments, DEFAULT_LIMITS, effectiveLimits, LIMIT_BOUNDS, LIMIT_LABELS, MIN_MINUTES } from './engine/limits.js';
 import { ntfyPublish, subscribeUrl } from './notify/ntfy.js';
-import { NotConfiguredError, NotFoundError, type GoWindowService } from './service.js';
+import { BadRequestError, NotConfiguredError, NotFoundError, type GoWindowService } from './service.js';
 import { coarse } from './sources/http.js';
 import { geocode, reverseTimezone } from './sources/openmeteo.js';
 
@@ -37,6 +37,7 @@ const settingsSchema = z.object({
   activity: z.enum(['walk', 'run', 'cycle', 'kids']),
   sensitive: z.boolean(),
   darkOk: z.boolean(),
+  minMinutes: z.number().int().min(10).max(240).nullable(),
   freeHours: z.array(z.array(range).max(8)).length(7),
   notify: z.object({
     enabled: z.boolean(),
@@ -88,6 +89,7 @@ export function createApp(service: GoWindowService): Hono {
   app.onError((err, c) => {
     if (err instanceof NotConfiguredError) return c.json({ error: err.message, code: 'location_required' }, 409);
     if (err instanceof NotFoundError) return c.json({ error: err.message }, 404);
+    if (err instanceof BadRequestError) return c.json({ error: err.message }, 400);
     console.error(err);
     return c.json({ error: err.message }, 500);
   });

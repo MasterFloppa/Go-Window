@@ -27,6 +27,7 @@ import type { OfferedWindow, Store } from './store.js';
 
 export class NotConfiguredError extends Error {}
 export class NotFoundError extends Error {}
+export class BadRequestError extends Error {}
 
 const PARKS_TTL_MS = 7 * 24 * 3600 * 1000;
 const PARKS_RETRY_MS = 10 * 60 * 1000;
@@ -100,7 +101,8 @@ export class GoWindowService {
     for (const day of plan.days) {
       for (const w of day.windows) {
         const prev = offered[w.id];
-        if (prev && prev.best === w.best && prev.minutes === w.minutes) continue;
+        // Keep the latest forecast for a window until it starts; after that, freeze what was offered.
+        if (prev && (`${w.date}T${w.start}` <= plan.now || (prev.best === w.best && JSON.stringify(prev.summary) === JSON.stringify(w.summary)))) continue;
         offered[w.id] = { id: w.id, date: w.date, start: w.start, end: w.end, minutes: w.minutes, best: w.best, summary: w.summary };
         changed = true;
       }
@@ -162,6 +164,7 @@ export class GoWindowService {
     let w: OfferedWindow | GoWindow | null = this.store.data.offered[input.windowId] ?? null;
     if (!w && this.settings.location) w = findWindow((await this.plan()).plan, input.windowId);
     if (!w) throw new NotFoundError(`Unknown window ${input.windowId}`);
+    if (`${w.date}T${w.start}` > this.nowLocal()) throw new BadRequestError('This window has not started yet. Check in after you go.');
 
     const feelings = new Set<Feeling>(input.feelings ?? []);
     let went = input.went ?? null;
