@@ -47,16 +47,18 @@ function proposals(entry: FeedbackEntry, eff: Limits): Proposal[] {
     out.push({ key: 'gust', target: c.gust - 3, rate, reason: `${verb} ${Math.round(c.gust)} km/h gusts were too much (${when})` });
 
   if (entry.went && f.has('great')) {
-    if (c.feels >= eff.maxFeels - 1.5 && !f.has('too_hot'))
-      out.push({ key: 'maxFeels', target: eff.maxFeels + LOOSEN_STEP.maxFeels!, rate: 1, reason: `${Math.round(c.feels)}°C felt great, so you handle heat a bit better (${when})` });
+    // Felt great past a limit (a "best available" window): move halfway toward what you handled.
+    // Felt great near a limit: nudge it a little. Either way the per-check-in cap still applies.
+    const loosen = (key: LimitKey, value: number, nearEdge: boolean, what: string) => {
+      if (value > eff[key]) out.push({ key, target: value, rate: 0.5, reason: `${what} felt great even though it was past your limit (${when})` });
+      else if (nearEdge) out.push({ key, target: eff[key] + LOOSEN_STEP[key]!, rate: 1, reason: `${what} felt fine (${when})` });
+    };
+    if (!f.has('too_hot')) loosen('maxFeels', c.feels, c.feels >= eff.maxFeels - 1.5, `Feels-like ${Math.round(c.feels)}°C`);
     if ((c.feelsMin ?? c.feels) <= eff.minFeels + 1.5 && !f.has('too_cold'))
       out.push({ key: 'minFeels', target: eff.minFeels + LOOSEN_STEP.minFeels!, rate: 1, reason: `${Math.round(c.feelsMin ?? c.feels)}°C felt great, so cooler is fine (${when})` });
-    if (c.pm25 !== null && c.pm25 >= eff.pm25 * 0.8 && !f.has('air_bad'))
-      out.push({ key: 'pm25', target: eff.pm25 + LOOSEN_STEP.pm25!, rate: 1, reason: `PM2.5 ${Math.round(c.pm25)} felt fine (${when})` });
-    if (c.humidity >= eff.humidity - 5 && !f.has('too_humid'))
-      out.push({ key: 'humidity', target: eff.humidity + LOOSEN_STEP.humidity!, rate: 1, reason: `${c.humidity}% humidity felt fine (${when})` });
-    if (c.uv >= eff.uv - 1 && !f.has('too_sunny'))
-      out.push({ key: 'uv', target: eff.uv + LOOSEN_STEP.uv!, rate: 1, reason: `UV ${c.uv} felt fine (${when})` });
+    if (c.pm25 !== null && !f.has('air_bad')) loosen('pm25', c.pm25, c.pm25 >= eff.pm25 * 0.8, `PM2.5 ${Math.round(c.pm25)}`);
+    if (!f.has('too_humid')) loosen('humidity', c.humidity, c.humidity >= eff.humidity - 5, `${c.humidity}% humidity`);
+    if (!f.has('too_sunny')) loosen('uv', c.uv, c.uv >= eff.uv - 1, `UV ${c.uv}`);
   }
   return out;
 }
