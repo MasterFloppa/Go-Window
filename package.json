@@ -9,10 +9,10 @@
     "node": ">=20.11"
   },
   "scripts": {
-    "dev": "concurrently -k -n api,web -c green,cyan \"tsx watch src/server/index.ts\" \"vite\"",
+    "dev": "concurrently -k -n api,web -c green,cyan \"cross-env GO_WINDOW_DEV=1 node --watch --import tsx src/server/index.ts\" \"vite\"",
     "build": "vite build",
-    "start": "vite build && tsx src/server/index.ts",
-    "start:lan": "vite build && cross-env HOST=0.0.0.0 tsx src/server/index.ts",
+    "start": "vite build && node --import tsx src/server/index.ts",
+    "start:lan": "vite build && cross-env HOST=0.0.0.0 node --import tsx src/server/index.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run"
   },
