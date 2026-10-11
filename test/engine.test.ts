@@ -3,7 +3,7 @@ import type { FeedbackEntry, GoWindow, HourConditions, Park, Settings } from '..
 import { localToEpochSeconds, nowInTimezone, toMinutes } from '../src/shared/time.js';
 import { allowedNumbers, ungroundedNumbers } from '../src/server/ai/grounding.js';
 import { parseByKeywords, verifyFeelings } from '../src/server/ai/feedbackParse.js';
-import { cleanField } from '../src/server/ai/narrate.js';
+import { claimsOverLimit, cleanField, dayFacts } from '../src/server/ai/narrate.js';
 import { applyFeedback, initialLearning, MAX_STEP } from '../src/server/engine/learn.js';
 import { DEFAULT_LIMITS, effectiveLimits, TOLERANCE } from '../src/server/engine/limits.js';
 import { buildPlan, pickPark } from '../src/server/engine/plan.js';
@@ -297,6 +297,33 @@ describe('applyFeedback', () => {
 });
 
 describe('cleanField', () => {
+  it('states below/above the limit explicitly in the facts', () => {
+    const plan = buildPlan({
+      settings: { ...defaultSettings(), location: { name: 'Test', lat: 12.97, lon: 77.59, timezone: 'Asia/Kolkata' } },
+      forecast: {
+        timezone: 'Asia/Kolkata',
+        utcOffsetSeconds: 19800,
+        hours: [...day('2026-10-11', () => ({ pm25: 34 })), ...day('2026-10-12'), ...day('2026-10-13')],
+        daylight: {},
+        airAvailable: true,
+        fetchedAt: 0,
+      },
+      parks: null,
+      base: DEFAULT_LIMITS,
+      now: new Date('2026-10-10T23:30:00Z'),
+    });
+    const facts = dayFacts(plan.days[0], 'walk', plan.limits);
+    expect(facts).toContain('PM2.5 up to 34 µg/m³, below the user\'s limit of 35');
+    expect(facts).toMatch(/below the user's max of 32/);
+  });
+
+  it('catches a flipped "above your limit" claim but not honest text', () => {
+    expect(claimsOverLimit("The air is still a bit above your limit at 33 µg/m³")).toBe(true);
+    expect(claimsOverLimit('PM2.5 exceeds the user\'s limit today')).toBe(true);
+    expect(claimsOverLimit("PM2.5 at 34, but it's below your limit and the UV is low")).toBe(false);
+    expect(claimsOverLimit('Walk over the bridge to the park, no limits today')).toBe(false);
+  });
+
   it('cuts text after the model closes the JSON inside a string', () => {
     expect(cleanField('Walk to the park, notice the light.”}  18:00-20:00 is also good')).toBe('Walk to the park, notice the light.');
   });

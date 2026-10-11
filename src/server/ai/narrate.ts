@@ -4,13 +4,20 @@ import { allowedNumbers, ungroundedNumbers } from './grounding.js';
 import { chatJson } from './ollama.js';
 
 export const ACTIVITY_WORD: Record<Activity, string> = { walk: 'walk', run: 'run', cycle: 'ride', kids: 'outdoor play' };
-export const PROMPT_VERSION = 5;
+export const PROMPT_VERSION = 7;
+
+/** Spells out the comparison so the model doesn't have to: it once called 34 "above" a limit of 35. */
+function versus(value: number, limit: number, word: 'limit' | 'max'): string {
+  const rel = value > limit ? 'above' : value < limit ? 'below' : 'exactly at';
+  return `${rel} the user's ${word} of ${limit}`;
+}
 
 function conditions(w: GoWindow, limits: Plan['limits']): string {
   const s = w.summary;
   const feels = s.feelsMin === s.feelsMax ? `${s.feelsMin}°C` : `${s.feelsMin} to ${s.feelsMax}°C`;
-  const air = s.pm25Max === null ? 'air quality unknown' : `PM2.5 up to ${s.pm25Max} µg/m³ (the user's limit is ${limits.pm25})`;
-  return `feels like ${feels} (the user's max is ${limits.maxFeels}°C), ${air}, rain chance up to ${s.rainProbMax}%, UV up to ${s.uvMax}`;
+  const air =
+    s.pm25Max === null ? 'air quality unknown' : `PM2.5 up to ${s.pm25Max} µg/m³, ${versus(s.pm25Max, limits.pm25, 'limit')}`;
+  return `feels like ${feels}, ${versus(s.feelsMax, limits.maxFeels, 'max')}°C; ${air}; rain chance up to ${s.rainProbMax}%; UV up to ${s.uvMax}`;
 }
 
 /**
@@ -119,6 +126,7 @@ Rules:
 - headline: at most 10 words. If there is a best window, include its start and end time.
 - why: at most 30 words. Mention at least two of the actual conditions (feels-like, PM2.5, rain chance, UV).
   Describe air honestly relative to the user's limit: only call it clean if PM2.5 is well under half the limit.
+  When the facts say "below" or "above" the user's limit, use that exact comparison; never reverse it.
 - idea: at most 25 words. One concrete thing to do outside in that window that suits the activity:
   something to notice, a route, or someone to bring. Encourage leaving the phone in a pocket.
 - The park time is how long it takes to reach the park, not how long to stay.
@@ -149,6 +157,14 @@ export function cleanField(s: string | undefined): string {
   const foreign = out.search(/[^\u0000-\u024F\u2000-\u206F\u2070-\u209F]/u);
   if (foreign >= 0) out = out.slice(0, foreign);
   return out.replace(/[\s”"'’,;:–-]+$/u, '').trim();
+}
+
+/**
+ * The number check can't catch a flipped comparison ("34 is above your limit of 35"), so this does:
+ * for a window inside every limit, any claim of being above/over a limit is a contradiction.
+ */
+export function claimsOverLimit(text: string): boolean {
+  return /\b(above|over|exceed\w*|past|higher than|beyond)\b[^.!?]{0,25}\b(your|the user'?s|their)\b[^.!?]{0,15}\b(limit|max\w*|threshold)\b/i.test(text);
 }
 
 const factsKey = (facts: string) => createHash('sha1').update(facts).digest('hex').slice(0, 12);
@@ -182,7 +198,9 @@ async function narrateDay(
     const g = { headline: cleanField(data.headline), why: cleanField(data.why), idea: cleanField(data.idea) };
     const text = `${g.headline} ${g.why} ${g.idea}`;
     const bad = ungroundedNumbers(text, allowed);
-    if (!bad.length && g.headline && g.why) {
+    const best = d.windows.find((w) => w.best);
+    const flipped = !!best && !best.fallback && claimsOverLimit(text);
+    if (!bad.length && !flipped && g.headline && g.why) {
       return {
         story: {
           date: d.date,
@@ -194,8 +212,12 @@ async function narrateDay(
         },
       };
     }
-    rejected.push(...bad.map((b) => `${d.date}: ${b}`));
-    retryNote = `\n\nYour previous answer used numbers that are not in the facts (${bad.join(', ')}). Use only numbers from the facts.`;
+    rejected.push(...bad.map((b) => `${d.date}: ${b}`), ...(flipped ? [`${d.date}: said "above your limit"`] : []));
+    retryNote = [
+      '\n\nYour previous answer was rejected.',
+      bad.length ? ` It used numbers that are not in the facts (${bad.join(', ')}); use only numbers from the facts.` : '',
+      flipped ? ' It said a condition was above or over the limit, but everything in this window is BELOW the user\'s limits.' : '',
+    ].join('');
   }
   return { story: { ...templateStory(d, activity), factsHash: factsKey(facts) } };
 }
