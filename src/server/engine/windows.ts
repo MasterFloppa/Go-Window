@@ -1,9 +1,15 @@
-import type { GoWindow, HourScore, NearMiss, TimeRange, WindowSummary } from '../../shared/types.js';
+import type { Factor, FactorKey, GoWindow, HourScore, NearMiss, TimeRange, WindowSummary } from '../../shared/types.js';
 import { fromMinutes, toMinutes } from '../../shared/time.js';
 import { limitingFactor } from './score.js';
 
 /** Hours scoring below this are "meh enough" that we would rather not send you out. */
 export const SCORE_THRESHOLD = 50;
+
+/**
+ * normal: inside every comfort limit and scoring well.
+ * fallback: anything not blocked outright (used only when a day has no normal window).
+ */
+export type WindowMode = 'normal' | 'fallback';
 
 interface Segment {
   from: number;
@@ -11,7 +17,8 @@ interface Segment {
   hour: HourScore | undefined;
 }
 
-const isGood = (s: Segment) => !!s.hour && !s.hour.blocked && s.hour.score >= SCORE_THRESHOLD;
+const isGood = (s: Segment) => !!s.hour && !s.hour.blocked && !s.hour.overLimit && s.hour.score >= SCORE_THRESHOLD;
+const isTolerable = (s: Segment) => !!s.hour && !s.hour.blocked;
 
 function splitByHour(from: number, to: number, byHour: Map<number, HourScore>): Segment[] {
   const out: Segment[] = [];
@@ -47,6 +54,14 @@ function buildWindow(date: string, run: Segment[], inFreeHours: boolean): GoWind
   const score = Math.round(run.reduce((sum, s) => sum + s.hour!.score * (s.to - s.from), 0) / minutes);
   const start = fromMinutes(from);
   const end = fromMinutes(to);
+  // For each limit this window goes past, keep the hour where it is worst.
+  const worstOver = new Map<FactorKey, Factor>();
+  for (const f of hours.flatMap((h) => h.factors)) {
+    if (!f.over) continue;
+    const cur = worstOver.get(f.key);
+    const worse = f.key === 'cold' ? (cur?.value ?? Infinity) > f.value : (cur?.value ?? -Infinity) < f.value;
+    if (worse) worstOver.set(f.key, f);
+  }
   return {
     id: `${date}T${start}-${end}`,
     date,
@@ -59,6 +74,7 @@ function buildWindow(date: string, run: Segment[], inFreeHours: boolean): GoWind
     park: null,
     best: false,
     inFreeHours,
+    ...(worstOver.size ? { overKeys: [...worstOver.keys()], overLimits: [...worstOver.values()].map((f) => f.label) } : {}),
   };
 }
 
@@ -110,10 +126,12 @@ export function findWindows(
   minMinutes: number,
   nowMinutes: number | null,
   inFreeHours: boolean,
+  mode: WindowMode = 'normal',
 ): { windows: GoWindow[]; nearMisses: NearMiss[] } {
   const byHour = new Map(dayHours.map((h) => [Number(h.time.slice(11, 13)), h]));
   const windows: GoWindow[] = [];
   const nearMisses: NearMiss[] = [];
+  const accept = mode === 'normal' ? isGood : isTolerable;
 
   for (const range of ranges) {
     let from = toMinutes(range.start);
@@ -133,13 +151,13 @@ export function findWindows(
       run = [];
     };
     for (const s of segs) {
-      if (isGood(s)) run.push(s);
+      if (accept(s)) run.push(s);
       else flush();
     }
     flush();
 
     windows.push(...found);
-    if (!found.length && inFreeHours) nearMisses.push(explainMiss(date, from, to, segs, longestShort));
+    if (!found.length && inFreeHours && mode === 'normal') nearMisses.push(explainMiss(date, from, to, segs, longestShort));
   }
   return { windows, nearMisses };
 }

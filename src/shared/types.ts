@@ -1,5 +1,8 @@
 export type Activity = 'walk' | 'run' | 'cycle' | 'kids';
 
+/** How far past your comfort limits a "best available" window may go when nothing fits. */
+export type Tolerance = 'strict' | 'balanced' | 'relaxed';
+
 /** Local wall-clock range, "HH:MM". `end` may be "24:00". */
 export interface TimeRange {
   start: string;
@@ -44,6 +47,7 @@ export interface Settings {
   darkOk: boolean;
   /** Shortest window worth suggesting, in minutes; null uses the activity default. */
   minMinutes: number | null;
+  tolerance: Tolerance;
   /** Index 0 = Sunday ... 6 = Saturday. */
   freeHours: TimeRange[][];
   notify: NotifySettings;
@@ -78,12 +82,16 @@ export interface Factor {
   value: number;
   limit: number;
   label: string;
+  /** Past your comfort limit but within tolerance. */
+  over?: boolean;
 }
 
 export interface HourScore {
   time: string;
   score: number;
   blocked: boolean;
+  /** At least one factor is past your comfort limit (but not blocked). */
+  overLimit?: boolean;
   limiting: Factor | null;
   factors: Factor[];
   conditions: HourConditions;
@@ -122,6 +130,11 @@ export interface GoWindow {
   park: Park | null;
   best: boolean;
   inFreeHours: boolean;
+  /** Nothing fit inside your limits, so this is the least-bad slot within tolerance. */
+  fallback?: boolean;
+  /** Which limits this window goes past, with the worst value, e.g. "PM2.5 32 µg/m³ (your limit 25)". */
+  overLimits?: string[];
+  overKeys?: FactorKey[];
 }
 
 export interface NearMiss {
@@ -154,6 +167,7 @@ export interface Plan {
   location: Location;
   activity: Activity;
   limits: Limits;
+  tolerance: Tolerance;
   minMinutes: number;
   days: DayPlan[];
   parksAvailable: boolean;

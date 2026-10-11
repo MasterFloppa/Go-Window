@@ -1,4 +1,4 @@
-import type { Activity, LimitKey, Limits } from '../../shared/types.js';
+import type { Activity, LimitKey, Limits, Tolerance } from '../../shared/types.js';
 
 export const DEFAULT_LIMITS: Limits = {
   minFeels: 12,
@@ -31,6 +31,28 @@ export const ACTIVITY_ADJUST: Record<Activity, Partial<Limits>> = {
 export const SENSITIVE_ADJUST: Partial<Limits> = { pm25: -10, maxFeels: -2, humidity: -5 };
 
 export const MIN_MINUTES: Record<Activity, number> = { walk: 30, run: 30, cycle: 45, kids: 45 };
+
+export interface ToleranceSpec {
+  heat: number;
+  cold: number;
+  pm25Factor: number;
+  humidity: number;
+  uv: number;
+  rainProb: number;
+  gust: number;
+  /** Rain in mm/h that blocks an hour regardless of chance. */
+  precip: number;
+}
+
+/**
+ * How far past your comfort limits a "best available" window may go when nothing fits.
+ * Strict never goes past them. Thunderstorms always block.
+ */
+export const TOLERANCE: Record<Tolerance, ToleranceSpec> = {
+  strict: { heat: 0, cold: 0, pm25Factor: 1, humidity: 0, uv: 0, rainProb: 0, gust: 0, precip: 0.5 },
+  balanced: { heat: 2, cold: 2, pm25Factor: 1.4, humidity: 7, uv: 2, rainProb: 15, gust: 10, precip: 1 },
+  relaxed: { heat: 4, cold: 4, pm25Factor: 2, humidity: 12, uv: 3, rainProb: 30, gust: 20, precip: 2 },
+};
 
 export const LIMIT_LABELS: Record<LimitKey, { label: string; unit: string }> = {
   minFeels: { label: 'Coldest feels-like', unit: '°C' },

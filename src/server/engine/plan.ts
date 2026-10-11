@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import type { DayPlan, GoWindow, HourScore, Limits, Park, Plan, Settings } from '../../shared/types.js';
 import { addDays, datePart, dayLabel, nowInTimezone, timePart, toMinutes, weekdayIndex, WEEKDAYS } from '../../shared/time.js';
 import type { Forecast } from '../sources/openmeteo.js';
-import { effectiveLimits, MIN_MINUTES } from './limits.js';
+import { effectiveLimits, MIN_MINUTES, TOLERANCE } from './limits.js';
 import { scoreHour } from './score.js';
 import { complement, findWindows } from './windows.js';
 
@@ -42,7 +42,8 @@ export function buildPlan({ settings, forecast, parks, base, now = new Date() }:
   const today = datePart(nowLocal);
   const nowMin = toMinutes(timePart(nowLocal));
 
-  const scored = forecast.hours.map((h) => scoreHour(h, limits, settings.darkOk));
+  const tolerance = settings.tolerance ?? 'balanced';
+  const scored = forecast.hours.map((h) => scoreHour(h, limits, settings.darkOk, TOLERANCE[tolerance]));
   const byDate = new Map<string, HourScore[]>();
   for (const h of scored) {
     const d = datePart(h.time);
@@ -57,12 +58,26 @@ export function buildPlan({ settings, forecast, parks, base, now = new Date() }:
     const wd = weekdayIndex(date);
     const free = settings.freeHours[wd] ?? [];
     const clip = i === 0 ? nowMin : null;
+    const stillOpen = (w: GoWindow) => clip === null || toMinutes(w.end) - clip >= LIVE_MIN_LEFT;
 
     // Today's windows are found on the full free ranges and then filtered, rather than clipped to "now",
     // so a window that is already open keeps a stable id (no new check-in or alert every few minutes).
     const found = findWindows(date, hours, free, minMinutes, null, true);
-    const windows = clip === null ? found.windows : found.windows.filter((w) => toMinutes(w.end) - clip >= LIVE_MIN_LEFT);
-    const nearMisses = clip === null ? found.nearMisses : found.nearMisses.filter((m) => toMinutes(m.end) > clip);
+    let windows = found.windows.filter(stillOpen);
+    let nearMisses = clip === null ? found.nearMisses : found.nearMisses.filter((m) => toMinutes(m.end) > clip);
+
+    // Nothing inside your limits: offer the least-bad free slot that stays within tolerance, clearly marked.
+    if (!windows.length && tolerance !== 'strict') {
+      const fallback = findWindows(date, hours, free, minMinutes, null, true, 'fallback')
+        .windows.filter(stillOpen)
+        .reduce<GoWindow | null>((b, w) => (!b || w.score > b.score ? w : b), null);
+      if (fallback) {
+        windows = [{ ...fallback, fallback: true }];
+        // The fallback card already says why its own slot is over the limits.
+        nearMisses = nearMisses.filter((m) => !(m.start < fallback.end && fallback.start < m.end));
+      }
+    }
+
     const best = windows.reduce<GoWindow | null>((b, w) => (!b || w.score > b.score ? w : b), null);
     if (best) best.best = true;
     for (const w of windows) w.park = pickPark(w, parks);
@@ -102,10 +117,11 @@ export function buildPlan({ settings, forecast, parks, base, now = new Date() }:
   const fingerprint = JSON.stringify({
     limits,
     activity: settings.activity,
+    tolerance,
     air: forecast.airAvailable,
     days: days.map((d) => ({
       f: d.freeLeftMinutes > 0,
-      w: d.windows.map((w) => [w.id, w.score, w.summary, w.park?.name]),
+      w: d.windows.map((w) => [w.id, w.score, w.summary, w.park?.name, w.fallback, w.overLimits]),
       m: d.nearMisses.map((m) => [m.start, m.end, m.reason]),
       e: d.betterElsewhere?.id,
     })),
@@ -117,6 +133,7 @@ export function buildPlan({ settings, forecast, parks, base, now = new Date() }:
     location: settings.location,
     activity: settings.activity,
     limits,
+    tolerance,
     minMinutes,
     days,
     parksAvailable: !!parks?.length,

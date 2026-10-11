@@ -38,6 +38,7 @@ const settingsSchema = z.object({
   sensitive: z.boolean(),
   darkOk: z.boolean(),
   minMinutes: z.number().int().min(10).max(240).nullable(),
+  tolerance: z.enum(['strict', 'balanced', 'relaxed']),
   freeHours: z.array(z.array(range).max(8)).length(7),
   notify: z.object({
     enabled: z.boolean(),

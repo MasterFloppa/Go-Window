@@ -50,6 +50,7 @@ export function defaultSettings(): Settings {
     sensitive: false,
     darkOk: true,
     minMinutes: null,
+    tolerance: 'balanced',
     freeHours: [weekend, weekday, weekday, weekday, weekday, weekday, weekend].map((d) => d.map((r) => ({ ...r }))),
     notify: {
       enabled: false,
