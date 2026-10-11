@@ -62,7 +62,8 @@ notification buttons include it. Requests from the laptop itself do not need it.
 ## Configuration
 
 Everything a user would change is in the app (**Settings** and **My limits**): location, activity, sensitivity, after-dark,
-free hours, shortest window, alerts and their timing, ntfy server and topic, local model, and every limit.
+free hours, what to do when nothing fits (strict / best available), shortest window, alerts and their timing, ntfy server
+and topic, local model, and every limit.
 
 Environment variables (all optional):
 
