@@ -100,7 +100,12 @@ function Advanced({ s, setS, status, minDefault }: { s: Settings; setS: (s: Sett
     setMsg(null);
     try {
       const r = await client.syncNotify();
-      setMsg({ ok: !r.errors.length, text: r.errors.length ? r.errors.join('; ') : `Synced: ${r.published.length} scheduled, ${r.cancelled.length} cancelled.` });
+      setMsg({
+        ok: !r.errors.length,
+        text: r.errors.length
+          ? r.errors.join('; ')
+          : `Up to date: ${r.scheduled} alert${r.scheduled === 1 ? '' : 's'} scheduled${r.cancelled.length ? `, ${r.cancelled.length} cancelled` : ''}.`,
+      });
     } catch (e) {
       setMsg({ ok: false, text: (e as Error).message });
     }

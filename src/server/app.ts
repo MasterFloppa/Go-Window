@@ -8,7 +8,7 @@ import { templateNarrative } from './ai/narrate.js';
 import { initialLearning, setLimitManually } from './engine/learn.js';
 import { adjustments, DEFAULT_LIMITS, effectiveLimits, LIMIT_BOUNDS, LIMIT_LABELS, MIN_MINUTES } from './engine/limits.js';
 import { ntfyPublish, subscribeUrl } from './notify/ntfy.js';
-import { BadRequestError, NotConfiguredError, NotFoundError, type GoWindowService } from './service.js';
+import { BadRequestError, NotConfiguredError, NotFoundError, SupersededError, type GoWindowService } from './service.js';
 import { coarse } from './sources/http.js';
 import { geocode, reverseTimezone } from './sources/openmeteo.js';
 
@@ -145,6 +145,8 @@ export function createApp(service: GoWindowService): Hono {
     try {
       return c.json({ narrative: await service.narrate(plan), narrativePending: false });
     } catch (err) {
+      // A newer plan is being narrated instead; not an error, the client will pick up the newer one.
+      if (err instanceof SupersededError) return c.json({ narrative: templateNarrative(plan), narrativePending: true }, 202);
       return c.json({ narrative: templateNarrative(plan), narrativePending: false, error: `Gemma unavailable: ${(err as Error).message}` }, 503);
     }
   });
@@ -212,7 +214,10 @@ export function createApp(service: GoWindowService): Hono {
     return c.json({ ok: true });
   });
 
-  app.post('/api/notify/sync', async (c) => c.json(await service.syncNotifications()));
+  app.post('/api/notify/sync', async (c) => {
+    const result = await service.syncNotifications();
+    return c.json({ ...result, scheduled: Object.keys(store.data.scheduled).length });
+  });
 
   app.get('/api/notify/qr', async (c) => {
     const n = store.data.settings.notify;

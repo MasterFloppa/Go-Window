@@ -28,6 +28,7 @@ import type { OfferedWindow, Store } from './store.js';
 export class NotConfiguredError extends Error {}
 export class NotFoundError extends Error {}
 export class BadRequestError extends Error {}
+export class SupersededError extends Error {}
 
 const PARKS_TTL_MS = 7 * 24 * 3600 * 1000;
 const EMPTY_PARKS_TTL_MS = 15 * 60 * 1000;
@@ -52,6 +53,8 @@ export class GoWindowService {
   private parksInFlight: Promise<void> | null = null;
   private parksFailedAt = 0;
   private syncChain: Promise<unknown> = Promise.resolve();
+  private narrateChain: Promise<unknown> = Promise.resolve();
+  private latestNarrationHash: string | null = null;
   lastSync: { at: string; result: SyncResult } | null = null;
 
   constructor(
@@ -155,7 +158,14 @@ export class GoWindowService {
     const retryDue = cached?.failed?.length && Date.now() - Date.parse(cached.generatedAt) > 10 * 60 * 1000;
     if (cached && !retryDue) return Promise.resolve(cached);
     if (this.narrating?.hash === plan.hash) return this.narrating.promise;
-    const promise = narratePlan(plan, this.settings.model, this.store.data.narrative)
+    this.latestNarrationHash = plan.hash;
+    // Ollama runs one request at a time, so narrations are queued rather than run side by side
+    // (parallel jobs just time each other out). A queued plan that was replaced meanwhile is skipped.
+    const promise = this.narrateChain
+      .then(() => {
+        if (this.latestNarrationHash !== plan.hash) throw new SupersededError('A newer plan replaced this one');
+        return narratePlan(plan, this.settings.model, this.store.data.narrative);
+      })
       .then((n) => {
         this.store.update((d) => void (d.narrative = n));
         return n;
@@ -163,6 +173,7 @@ export class GoWindowService {
       .finally(() => {
         if (this.narrating?.hash === plan.hash) this.narrating = null;
       });
+    this.narrateChain = promise.catch(() => undefined);
     this.narrating = { hash: plan.hash, promise };
     return promise;
   }

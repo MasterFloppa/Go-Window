@@ -119,7 +119,8 @@ export const client = {
   resetLimits: () => api<LimitsView>('/api/limits/reset', { method: 'POST' }),
   receipt: () => api<Receipt>('/api/receipt'),
   testNotify: () => api<{ ok: boolean }>('/api/notify/test', { method: 'POST' }),
-  syncNotify: () => api<{ published: string[]; cancelled: string[]; errors: string[] }>('/api/notify/sync', { method: 'POST' }),
+  syncNotify: () =>
+    api<{ published: string[]; cancelled: string[]; errors: string[]; scheduled: number }>('/api/notify/sync', { method: 'POST' }),
   qr: () => api<{ url: string; svg: string }>('/api/notify/qr'),
   access: () => api<{ key: string; lanUrls: string[] }>('/api/access'),
 };
