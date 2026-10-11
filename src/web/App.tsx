@@ -76,7 +76,11 @@ export function App() {
         setStatus(st);
         setSettings(s.settings);
         setMinMinutes(s.minMinutes);
-        if (s.settings.location) await loadPlan();
+        if (s.settings.location) {
+          // Limits and receipt do not depend on the forecast; load them even if the plan request fails.
+          void loadSide().catch(() => undefined);
+          await loadPlan();
+        }
       } catch (e) {
         setError(
           e instanceof ApiError && e.status === 401
@@ -85,7 +89,7 @@ export function App() {
         );
       }
     })();
-  }, [loadPlan]);
+  }, [loadPlan, loadSide]);
 
   // One-tap "Went - great" from a phone notification.
   useEffect(() => {
