@@ -13,7 +13,8 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/api': `http://127.0.0.1:${apiPort}`,
+      // Trailing slash matters: plain '/api' would also proxy the UI's own module '/api.ts'.
+      '/api/': `http://127.0.0.1:${apiPort}`,
     },
   },
   test: {
