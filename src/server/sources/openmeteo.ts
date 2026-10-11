@@ -37,7 +37,9 @@ interface GeocodeResponse {
   results?: { name: string; admin1?: string; country?: string; latitude: number; longitude: number; timezone: string }[];
 }
 
-const FORECAST_DAYS = 3;
+/** One extra day: Open-Meteo counts days from the UTC date, so just after local midnight in UTC+ zones
+ * a 3-day request would stop short of the third local day. */
+const FORECAST_DAYS = 4;
 const CACHE_MS = 30 * 60 * 1000;
 /** If air quality failed, retry soon rather than planning without it for half an hour. */
 const PARTIAL_CACHE_MS = 3 * 60 * 1000;
