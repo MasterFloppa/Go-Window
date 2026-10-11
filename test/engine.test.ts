@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { FeedbackEntry, GoWindow, HourConditions, Park, Settings } from '../src/shared/types.js';
-import { localToEpochSeconds, nowInTimezone } from '../src/shared/time.js';
+import { localToEpochSeconds, nowInTimezone, toMinutes } from '../src/shared/time.js';
 import { allowedNumbers, ungroundedNumbers } from '../src/server/ai/grounding.js';
 import { parseByKeywords, verifyFeelings } from '../src/server/ai/feedbackParse.js';
 import { cleanField } from '../src/server/ai/narrate.js';
 import { applyFeedback, initialLearning, MAX_STEP } from '../src/server/engine/learn.js';
-import { DEFAULT_LIMITS, effectiveLimits } from '../src/server/engine/limits.js';
+import { DEFAULT_LIMITS, effectiveLimits, TOLERANCE } from '../src/server/engine/limits.js';
 import { buildPlan, pickPark } from '../src/server/engine/plan.js';
 import { scoreHour } from '../src/server/engine/score.js';
 import { complement, findWindows } from '../src/server/engine/windows.js';
@@ -176,6 +176,68 @@ describe('pickPark', () => {
 
   it('never picks a park that is too far for the window', () => {
     expect(pickPark({ minutes: 30 } as GoWindow, [park('far park', 25, 1_000_000)])).toBeNull();
+  });
+});
+
+describe('tolerance and best available', () => {
+  const sensitive: Settings = {
+    ...defaultSettings(),
+    location: { name: 'Hyderabad', lat: 17.38, lon: 78.46, timezone: 'Asia/Kolkata' },
+    sensitive: true,
+  };
+  // Sensitive walk: PM2.5 limit 25. Every hour is a bit over (30), mornings are far over (50).
+  const smoggy: Forecast = {
+    timezone: 'Asia/Kolkata',
+    utcOffsetSeconds: 19800,
+    hours: ['2026-10-11', '2026-10-12', '2026-10-13'].flatMap((d) => day(d, (h) => ({ pm25: h < 12 ? 50 : 30, feels: 29 }))),
+    daylight: {},
+    airAvailable: true,
+    fetchedAt: 0,
+  } as Forecast;
+  const now = new Date('2026-10-10T23:30:00Z');
+
+  it('marks an hour slightly over a limit as over, not blocked, in balanced mode', () => {
+    const h = scoreHour(hour('2026-10-11T18:00', { pm25: 30 }), { ...DEFAULT_LIMITS, pm25: 25 }, true, TOLERANCE.balanced);
+    expect(h.blocked).toBe(false);
+    expect(h.overLimit).toBe(true);
+    expect(scoreHour(hour('2026-10-11T07:00', { pm25: 50 }), { ...DEFAULT_LIMITS, pm25: 25 }, true, TOLERANCE.balanced).blocked).toBe(true);
+  });
+
+  it('offers a clearly marked best-available window when nothing fits', () => {
+    const plan = buildPlan({ settings: { ...sensitive, tolerance: 'balanced' }, forecast: smoggy, parks: null, base: DEFAULT_LIMITS, now });
+    for (const d of plan.days) {
+      const best = d.windows.find((w) => w.best)!;
+      expect(best.fallback).toBe(true);
+      expect(best.overKeys).toContain('air');
+      expect(best.overLimits?.[0]).toMatch(/PM2.5 30/);
+      expect(toMinutes(best.start)).toBeGreaterThanOrEqual(12 * 60);
+      expect(d.nearMisses.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('shows nothing in strict mode', () => {
+    const plan = buildPlan({ settings: { ...sensitive, tolerance: 'strict' }, forecast: smoggy, parks: null, base: DEFAULT_LIMITS, now });
+    expect(plan.days.every((d) => d.windows.length === 0)).toBe(true);
+  });
+
+  it('loosens a limit toward what you handled when a best-available walk felt great', () => {
+    const entry: FeedbackEntry = {
+      id: 'f1',
+      windowId: 'w1',
+      date: '2026-10-11',
+      start: '18:00',
+      end: '19:00',
+      went: true,
+      minutes: 60,
+      feelings: ['great'],
+      parsedBy: 'buttons',
+      conditions: { feels: 29, pm25: 30, humidity: 40, uv: 0, rainProb: 0, gust: 10 },
+      createdAt: '2026-10-11T13:40:00Z',
+    };
+    const { state } = applyFeedback(initialLearning(), entry, 'walk', true);
+    const eff = effectiveLimits(state.base, 'walk', true);
+    expect(eff.pm25).toBeGreaterThan(25);
+    expect(eff.pm25).toBeLessThanOrEqual(30);
   });
 });
 

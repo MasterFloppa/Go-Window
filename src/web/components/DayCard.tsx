@@ -9,16 +9,26 @@ export function Conditions({ w }: { w: GoWindow }) {
   const s = w.summary;
   const lim = w.limiting;
   const warnKey = lim && lim.penalty >= 5 ? lim.key : null;
-  const cls = (key: string) => (warnKey === key ? 'chip warn' : 'chip');
+  const over = new Set(w.overKeys ?? []);
+  const cls = (key: string) => (over.has(key as never) ? 'chip bad' : warnKey === key ? 'chip warn' : 'chip');
   return (
     <div className="chips">
       <span className={cls('heat')}>🌡 feels {feelsText(s)}</span>
       <span className={cls('air')}>🫁 {s.pm25Max === null ? 'air n/a' : `PM2.5 ≤ ${s.pm25Max}`}</span>
       <span className={cls('rain')}>☔ rain {s.rainProbMax}%</span>
-      {warnKey === 'uv' && <span className="chip warn">☀ UV {s.uvMax}</span>}
-      {warnKey === 'humidity' && <span className="chip warn">💧 {s.humidityMax}%</span>}
-      {warnKey === 'wind' && <span className="chip warn">🍃 gusts {s.gustMax} km/h</span>}
+      {(warnKey === 'uv' || over.has('uv')) && <span className={cls('uv')}>☀ UV {s.uvMax}</span>}
+      {(warnKey === 'humidity' || over.has('humidity')) && <span className={cls('humidity')}>💧 {s.humidityMax}%</span>}
+      {(warnKey === 'wind' || over.has('wind')) && <span className={cls('wind')}>🍃 gusts {s.gustMax} km/h</span>}
       {warnKey === 'dark' && <span className="chip warn">🌙 after dark</span>}
+    </div>
+  );
+}
+
+export function OverNote({ w }: { w: GoWindow }) {
+  if (!w.fallback) return null;
+  return (
+    <div className="over-note">
+      ⚠ Best available: nothing fit all your limits. Over: {(w.overLimits ?? []).join('; ') || 'slightly'}.
     </div>
   );
 }
@@ -43,7 +53,7 @@ function WindowRow({ w, timezone, activity }: { w: GoWindow; timezone: string; a
     );
   }
   return (
-    <div className="window-row best">
+    <div className={`window-row best ${w.fallback ? 'fallback' : ''}`}>
       <div style={{ flex: 1 }}>
         <div className="spread">
           <div className="window-time">
@@ -51,6 +61,7 @@ function WindowRow({ w, timezone, activity }: { w: GoWindow; timezone: string; a
           </div>
           <CalendarButton w={w} timezone={timezone} activity={activity} />
         </div>
+        <OverNote w={w} />
         <Conditions w={w} />
         {w.park && (
           <div className="small">

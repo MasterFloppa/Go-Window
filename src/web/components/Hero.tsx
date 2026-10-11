@@ -41,14 +41,16 @@ export function NextWindowHero({ plan, narrative }: { plan: Plan; narrative: Nar
   const { d, w } = next;
   const live = `${w.date}T${w.start}` <= now;
   const story = narrative.days.find((s) => s.date === d.date);
+  const kind = w.fallback ? 'Best available' : 'Next go window';
   return (
-    <section className="card hero">
-      <div className="muted">{live ? 'Your window is open now' : `Next go window · ${d.label}`}</div>
+    <section className={`card hero ${w.fallback ? 'fallback' : ''}`}>
+      <div className="muted">{live ? `${w.fallback ? 'Best available slot' : 'Your window'} is open now` : `${kind} · ${d.label}`}</div>
       <div className="hero-time">
         {w.start}–{w.end}
       </div>
       <div className="hero-head">{story?.headline ?? `${fmtMinutes(w.minutes)} outside`}</div>
       {story?.why && <div className="muted">{story.why}</div>}
+      {w.fallback && w.overLimits?.length ? <div className="small">⚠ Over your limits: {w.overLimits.join('; ')}</div> : null}
       <Conditions w={w} />
       {w.park && (
         <div className="small">

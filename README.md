@@ -11,6 +11,7 @@ Built for the DEV Hacktoberfest Open-Source AI Challenge, Week 1: **Touch Grass*
 ## What it does
 
 - **Plans around your real day.** You set free hours (e.g. Mon–Fri 07:00–08:30 and 18:00–20:00). It only suggests time inside them.
+- **Never a dead end.** If nothing fits all your limits (common in a hot, smoggy city), it offers the closest free slot within a tolerance you choose (Strict / Balanced / Relaxed), clearly marked with what is over and by how much. Thunderstorms always block.
 - **3 days ahead.** Today, tomorrow and the day after, each with its best window, other good windows, and the reason a free slot does not work ("PM2.5 58 µg/m³, your limit 35").
 - **Better time elsewhere.** If a much better slot sits outside your free hours, it tells you, in case you can move something.
 - **Learns your limits.** After a window, tap how it felt (too hot, muggy, air felt bad, great…) or just write a sentence. Limits tighten quickly when something felt bad and loosen slowly when it felt great, within safe bounds, and every change is explained.

@@ -4,7 +4,7 @@ import { allowedNumbers, ungroundedNumbers } from './grounding.js';
 import { chatJson } from './ollama.js';
 
 export const ACTIVITY_WORD: Record<Activity, string> = { walk: 'walk', run: 'run', cycle: 'ride', kids: 'outdoor play' };
-export const PROMPT_VERSION = 4;
+export const PROMPT_VERSION = 5;
 
 function conditions(w: GoWindow, limits: Plan['limits']): string {
   const s = w.summary;
@@ -25,9 +25,14 @@ export function dayFacts(d: DayPlan, activity: Activity, limits: Plan['limits'])
     `User's free hours: ${d.free.length ? d.free.map((r) => `${r.start}-${r.end}`).join(', ') : 'none'}`,
   ];
   if (best) {
-    lines.push(`Best window: ${best.start}-${best.end}, which is ${best.minutes} minutes long.`);
+    if (best.fallback) {
+      lines.push(`No window fits fully inside the user's limits. Best available compromise: ${best.start}-${best.end}, which is ${best.minutes} minutes long.`);
+      if (best.overLimits?.length) lines.push(`Over the user's limits in that window: ${best.overLimits.join('; ')}.`);
+    } else {
+      lines.push(`Best window: ${best.start}-${best.end}, which is ${best.minutes} minutes long.`);
+    }
     lines.push(`Conditions in the best window: ${conditions(best, limits)}.`);
-    if (best.limiting && best.limiting.penalty >= 5) lines.push(`Main thing to watch: ${best.limiting.label}.`);
+    if (best.limiting && best.limiting.penalty >= 5 && !best.fallback) lines.push(`Main thing to watch: ${best.limiting.label}.`);
     if (best.park) lines.push(`Nearby park: ${best.park.name}, reachable in ${best.park.walkMinutes} minutes on foot from home.`);
   } else {
     lines.push('Best window: none inside the free hours.');
@@ -45,6 +50,17 @@ export function dayFacts(d: DayPlan, activity: Activity, limits: Plan['limits'])
 export function templateStory(d: DayPlan, activity: Activity): DayStory {
   const best = d.windows.find((w) => w.best);
   const word = ACTIVITY_WORD[activity];
+  if (best?.fallback) {
+    return {
+      date: d.date,
+      headline: `${d.label}: best available ${best.start}–${best.end}`,
+      why: 'Nothing fits all your limits, so this is the closest slot in your free hours.',
+      idea: best.park
+        ? `Keep it gentle: a shorter, shady loop at ${best.park.name} (${best.park.walkMinutes} min on foot), away from traffic.`
+        : 'Keep it gentle: a shorter, shady loop away from main roads.',
+      source: 'template',
+    };
+  }
   if (best) {
     const s = best.summary;
     const feels = s.feelsMin === s.feelsMax ? `${s.feelsMin}°C` : `${s.feelsMin}–${s.feelsMax}°C`;
@@ -106,6 +122,8 @@ Rules:
 - idea: at most 25 words. One concrete thing to do outside in that window that suits the activity:
   something to notice, a route, or someone to bring. Encourage leaving the phone in a pocket.
 - The park time is how long it takes to reach the park, not how long to stay.
+- If the facts say the best window is a compromise over the user's limits, say so plainly in "why", and make the idea
+  a way to make it easier (shorter, shadier, greener, away from traffic). Do not call it perfect.
 - If there is no best window, say so kindly, give the reason, and mention the better time outside the free hours if one is listed.
 - No emojis, no markdown, do not tell the user to check an app or website.`;
 

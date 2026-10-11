@@ -42,7 +42,8 @@ function digest(day: DayPlan, story: string | null, settings: Settings, accessKe
   const lines: string[] = [];
   if (story) lines.push(story);
   if (best) {
-    lines.push(`Best: ${best.start}–${best.end} (${best.minutes} min). ${conditionsLine(best)}`);
+    lines.push(`${best.fallback ? 'Best available' : 'Best'}: ${best.start}–${best.end} (${best.minutes} min). ${conditionsLine(best)}`);
+    if (best.fallback && best.overLimits?.length) lines.push(`Over your limits: ${best.overLimits.join('; ')}.`);
     if (best.park) lines.push(`Nearby: ${best.park.name}, ${best.park.walkMinutes} min on foot.`);
   } else {
     const miss = day.nearMisses[0];
@@ -86,9 +87,10 @@ export function desiredNotifications(
       out.push({
         seq: `gw-go-${ymd}-${hhmm}`,
         msg: {
-          title: `Go outside: ${best.start}-${best.end}`,
+          title: `${best.fallback ? 'Best available' : 'Go outside'}: ${best.start}-${best.end}`,
           message: [
             `Your ${best.minutes}-minute ${word} window opens at ${best.start}.`,
+            best.fallback && best.overLimits?.length ? `Over your limits: ${best.overLimits.join('; ')}. Keep it gentle.` : '',
             conditionsLine(best),
             best.park ? `Try ${best.park.name}, ${best.park.walkMinutes} min on foot.` : '',
             'Phone in your pocket.',

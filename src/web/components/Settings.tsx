@@ -7,6 +7,12 @@ import { LocationPicker } from './LocationPicker';
 
 const MIN_OPTIONS = [15, 20, 30, 45, 60, 90];
 
+const TOLERANCES: { id: Settings['tolerance']; label: string; hint: string }[] = [
+  { id: 'strict', label: 'Show nothing', hint: 'Strict: only suggest times inside every limit, even if that means no window.' },
+  { id: 'balanced', label: 'Best available (a little over)', hint: 'Balanced: suggest the closest slot, up to about 2°C or 40% PM2.5 over your limits, clearly marked.' },
+  { id: 'relaxed', label: 'Best available (more flexible)', hint: 'Relaxed: up to about 4°C or double your PM2.5 limit. Thunderstorms always block.' },
+];
+
 export function ActivityPicker({ value, onChange }: { value: Settings['activity']; onChange: (a: Settings['activity']) => void }) {
   return (
     <div className="chips">
@@ -238,6 +244,17 @@ export function SettingsPanel({
               <input type="checkbox" checked={s.darkOk} onChange={(e) => setS({ ...s, darkOk: e.target.checked })} />
               Going out after dark is fine
             </label>
+            <div className="small muted" style={{ marginTop: 10 }}>
+              When nothing fits all your limits
+            </div>
+            <div className="chips">
+              {TOLERANCES.map((t) => (
+                <button key={t.id} className={`chip ${s.tolerance === t.id ? 'on' : ''}`} onClick={() => setS({ ...s, tolerance: t.id })} title={t.hint}>
+                  {t.label}
+                </button>
+              ))}
+            </div>
+            <div className="muted small">{TOLERANCES.find((t) => t.id === s.tolerance)?.hint}</div>
           </section>
         </div>
       </div>

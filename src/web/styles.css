@@ -403,6 +403,21 @@ button.chip.on {
   background: #f3fbf5;
 }
 
+.window-row.fallback {
+  border-color: #e0b46a;
+  background: #fffaf0;
+}
+
+.over-note {
+  font-size: 0.85rem;
+  color: #8a5a12;
+  margin-top: 4px;
+}
+
+.hero.fallback {
+  background: linear-gradient(135deg, #8a6a1f, #b58a2a 60%, #d6b25a);
+}
+
 .window-row.compact {
   padding: 6px 12px;
   font-size: 0.92rem;
