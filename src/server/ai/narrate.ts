@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { Activity, DayPlan, DayStory, GoWindow, Narrative, Plan } from '../../shared/types.js';
+import type { Activity, DayPlan, DayStory, GoWindow, NearMiss, Narrative, Plan } from '../../shared/types.js';
 import { allowedNumbers, ungroundedNumbers } from './grounding.js';
 import { chatJson } from './ollama.js';
 
@@ -69,17 +69,32 @@ export function templateStory(d: DayPlan, activity: Activity): DayStory {
       source: 'template',
     };
   }
-  const miss = d.nearMisses[0];
+  const blockers = [...new Set(d.nearMisses.map((m) => FACTOR_NAMES[m.factor]))];
   return {
     date: d.date,
     headline: `${d.label}: no good window in your free hours`,
-    why: miss ? `${miss.start}–${miss.end}: ${miss.reason}.` : 'None of your free slots are long enough.',
+    why: blockers.length
+      ? `None of your free slots fit your limits (${blockers.join(', ')}). Details below.`
+      : 'None of your free slots are long enough.',
     idea: d.betterElsewhere
-      ? `If you can move things, ${d.betterElsewhere.start}–${d.betterElsewhere.end} looks much better.`
-      : 'Stretch indoors today and check back tomorrow.',
+      ? 'There is a better slot outside your free hours, shown below.'
+      : 'If this keeps happening, widen your free hours or adjust your limits.',
     source: 'template',
   };
 }
+
+export const FACTOR_NAMES: Record<NearMiss['factor'], string> = {
+  storm: 'thunderstorms',
+  rain: 'rain',
+  air: 'air quality',
+  heat: 'heat',
+  cold: 'cold',
+  humidity: 'humidity',
+  uv: 'UV',
+  wind: 'wind',
+  dark: 'darkness',
+  short: 'too short',
+};
 
 const SYSTEM = `You are Go Window, a warm, practical outdoor coach.
 You get computed facts about ONE day and write a very short plan for it.
