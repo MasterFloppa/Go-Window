@@ -1,12 +1,22 @@
 import { useState } from 'react';
 import type { TimeRange } from '../../shared/types';
-import { WEEKDAYS } from '../../shared/time';
+import { fromMinutes, toMinutes, WEEKDAYS } from '../../shared/time';
 
 const WEEKDAY_IDX = [1, 2, 3, 4, 5];
 const WEEKEND_IDX = [6, 0];
 const DAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
 
 const same = (days: TimeRange[][], idx: number[]) => idx.every((i) => JSON.stringify(days[i]) === JSON.stringify(days[idx[0]]));
+
+/** A one-hour slot that doesn't overlap the existing ones, preferring common free times. */
+function nextFreeSlot(ranges: TimeRange[]): TimeRange {
+  const taken = ranges.map((r) => [toMinutes(r.start), toMinutes(r.end)]);
+  for (const h of [18, 7, 12, 17, 19, 20, 13, 6, 21, 8, 16, 14, 15, 9, 10, 11, 22]) {
+    const s = h * 60;
+    if (taken.every(([a, b]) => s + 60 <= a || s >= b)) return { start: fromMinutes(s), end: fromMinutes(s + 60) };
+  }
+  return { start: '18:00', end: '19:00' };
+}
 
 function RangeRow({ ranges, onChange }: { ranges: TimeRange[]; onChange: (r: TimeRange[]) => void }) {
   return (
@@ -32,7 +42,7 @@ function RangeRow({ ranges, onChange }: { ranges: TimeRange[]; onChange: (r: Tim
         </span>
       ))}
       {ranges.length < 8 && (
-        <button className="btn ghost small" onClick={() => onChange([...ranges, { start: '18:00', end: '19:00' }])}>
+        <button className="btn ghost small" onClick={() => onChange([...ranges, nextFreeSlot(ranges)])}>
           + slot
         </button>
       )}
