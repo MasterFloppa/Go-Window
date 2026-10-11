@@ -3,6 +3,7 @@ import type { FeedbackEntry, GoWindow, HourConditions, Park, Settings } from '..
 import { localToEpochSeconds, nowInTimezone } from '../src/shared/time.js';
 import { allowedNumbers, ungroundedNumbers } from '../src/server/ai/grounding.js';
 import { parseByKeywords, verifyFeelings } from '../src/server/ai/feedbackParse.js';
+import { cleanField } from '../src/server/ai/narrate.js';
 import { applyFeedback, initialLearning, MAX_STEP } from '../src/server/engine/learn.js';
 import { DEFAULT_LIMITS, effectiveLimits } from '../src/server/engine/limits.js';
 import { buildPlan, pickPark } from '../src/server/engine/plan.js';
@@ -230,6 +231,20 @@ describe('applyFeedback', () => {
       state = applyFeedback(state, entry({ id: `f${i}`, feelings: ['too_hot'], conditions: { feels: 5, pm25: 10, humidity: 60, uv: 2, rainProb: 0, gust: 10 } }), 'walk', false).state;
     }
     expect(state.base.maxFeels).toBe(20);
+  });
+});
+
+describe('cleanField', () => {
+  it('cuts text after the model closes the JSON inside a string', () => {
+    expect(cleanField('Walk to the park, notice the light.”}  18:00-20:00 is also good')).toBe('Walk to the park, notice the light.');
+  });
+
+  it('cuts at a switch to another script', () => {
+    expect(cleanField('Notice the changing light. শুন্য সময় নেই')).toBe('Notice the changing light.');
+  });
+
+  it('keeps normal text with degrees, µg/m³ and dashes', () => {
+    expect(cleanField('Feels like 29°C, PM2.5 33 µg/m³ – close to your limit')).toBe('Feels like 29°C, PM2.5 33 µg/m³ – close to your limit');
   });
 });
 

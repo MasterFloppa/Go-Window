@@ -181,6 +181,8 @@ export interface Narrative {
   ms: number;
   /** Numbers Gemma used that were not in the facts; those lines were replaced. */
   rejected: string[];
+  /** Days whose model call failed (timeout, server down) and fell back to template text; retried later. */
+  failed?: string[];
 }
 
 export type Feeling = 'great' | 'too_hot' | 'too_cold' | 'air_bad' | 'too_humid' | 'too_sunny' | 'rain' | 'windy';

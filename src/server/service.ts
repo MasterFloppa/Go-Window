@@ -148,7 +148,9 @@ export class GoWindowService {
 
   narrate(plan: Plan): Promise<Narrative> {
     const cached = this.cachedNarrative(plan);
-    if (cached) return Promise.resolve(cached);
+    // A narrative with failed days is reused for a while, then retried (keeping the days that worked).
+    const retryDue = cached?.failed?.length && Date.now() - Date.parse(cached.generatedAt) > 10 * 60 * 1000;
+    if (cached && !retryDue) return Promise.resolve(cached);
     if (this.narrating?.hash === plan.hash) return this.narrating.promise;
     const promise = narratePlan(plan, this.settings.model, this.store.data.narrative)
       .then((n) => {

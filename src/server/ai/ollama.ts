@@ -29,6 +29,7 @@ export async function chatJson<T>(opts: {
   schema: object;
   timeoutMs?: number;
   temperature?: number;
+  maxTokens?: number;
 }): Promise<{ data: T; ms: number }> {
   const started = Date.now();
   const res = await fetch(`${OLLAMA_HOST}/api/chat`, {
@@ -39,7 +40,8 @@ export async function chatJson<T>(opts: {
       stream: false,
       keep_alive: '30m',
       format: opts.schema,
-      options: { temperature: opts.temperature ?? 0.3 },
+      // A hard cap on output: small models can occasionally loop in JSON mode and never stop.
+      options: { temperature: opts.temperature ?? 0.3, num_predict: opts.maxTokens ?? 320, repeat_penalty: 1.15 },
       messages: [
         { role: 'system', content: opts.system },
         { role: 'user', content: opts.user },

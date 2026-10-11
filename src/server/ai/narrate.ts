@@ -4,7 +4,7 @@ import { allowedNumbers, ungroundedNumbers } from './grounding.js';
 import { chatJson } from './ollama.js';
 
 export const ACTIVITY_WORD: Record<Activity, string> = { walk: 'walk', run: 'run', cycle: 'ride', kids: 'outdoor play' };
-export const PROMPT_VERSION = 3;
+export const PROMPT_VERSION = 4;
 
 function conditions(w: GoWindow, limits: Plan['limits']): string {
   const s = w.summary;
@@ -112,14 +112,26 @@ Rules:
 const SCHEMA = {
   type: 'object',
   properties: {
-    headline: { type: 'string' },
-    why: { type: 'string' },
-    idea: { type: 'string' },
+    // Length caps become part of Ollama's output grammar, so a string cannot run on forever.
+    headline: { type: 'string', maxLength: 80 },
+    why: { type: 'string', maxLength: 220 },
+    idea: { type: 'string', maxLength: 180 },
   },
   required: ['headline', 'why', 'idea'],
 };
 
 type GemmaDay = { headline: string; why: string; idea: string };
+
+/**
+ * Small models sometimes "close" the JSON with a typographic quote (”}) inside the string and keep
+ * talking, occasionally switching language. Keep only the part before that.
+ */
+export function cleanField(s: string | undefined): string {
+  let out = (s ?? '').split(/[”"]\s*[}\]]/)[0].split('\n')[0];
+  const foreign = out.search(/[^\u0000-\u024F\u2000-\u206F\u2070-\u209F]/u);
+  if (foreign >= 0) out = out.slice(0, foreign);
+  return out.replace(/[\s”"'’,;:–-]+$/u, '').trim();
+}
 
 const factsKey = (facts: string) => createHash('sha1').update(facts).digest('hex').slice(0, 12);
 
@@ -129,45 +141,58 @@ async function narrateDay(
   limits: Plan['limits'],
   model: string,
   rejected: string[],
-): Promise<DayStory> {
+): Promise<{ story: DayStory; error?: string }> {
   const facts = dayFacts(d, activity, limits);
   const allowed = allowedNumbers(facts);
   let retryNote = '';
   for (let attempt = 0; attempt < 2; attempt++) {
-    const { data } = await chatJson<GemmaDay>({
-      model,
-      system: SYSTEM,
-      user: `Facts:\n${facts}${retryNote}`,
-      schema: SCHEMA,
-      temperature: attempt === 0 ? 0.4 : 0.1,
-      timeoutMs: 90000,
-    });
-    const text = `${data.headline} ${data.why} ${data.idea}`;
+    let data: GemmaDay;
+    try {
+      ({ data } = await chatJson<GemmaDay>({
+        model,
+        system: SYSTEM,
+        user: `Facts:\n${facts}${retryNote}`,
+        schema: SCHEMA,
+        temperature: attempt === 0 ? 0.4 : 0.1,
+        timeoutMs: 60000,
+      }));
+    } catch (err) {
+      // A cut-off or malformed answer is worth one more try; a timeout or a down server is not.
+      if (err instanceof SyntaxError && attempt === 0) continue;
+      return { story: { ...templateStory(d, activity), factsHash: factsKey(facts) }, error: (err as Error).message };
+    }
+    const g = { headline: cleanField(data.headline), why: cleanField(data.why), idea: cleanField(data.idea) };
+    const text = `${g.headline} ${g.why} ${g.idea}`;
     const bad = ungroundedNumbers(text, allowed);
-    if (!bad.length && data.headline.trim() && data.why.trim()) {
+    if (!bad.length && g.headline && g.why) {
       return {
-        date: d.date,
-        headline: data.headline.trim(),
-        why: data.why.trim(),
-        idea: data.idea.trim(),
-        source: 'gemma',
-        factsHash: factsKey(facts),
+        story: {
+          date: d.date,
+          headline: g.headline,
+          why: g.why,
+          idea: g.idea,
+          source: 'gemma',
+          factsHash: factsKey(facts),
+        },
       };
     }
     rejected.push(...bad.map((b) => `${d.date}: ${b}`));
     retryNote = `\n\nYour previous answer used numbers that are not in the facts (${bad.join(', ')}). Use only numbers from the facts.`;
   }
-  return { ...templateStory(d, activity), factsHash: factsKey(facts) };
+  return { story: { ...templateStory(d, activity), factsHash: factsKey(facts) } };
 }
 
 /**
  * Narrates each day with the local model, one small call per day, and checks every number it
  * used against that day's facts. Days whose facts did not change reuse the previous story.
- * Days with nothing left to plan skip the model entirely.
+ * Days with nothing left to plan skip the model entirely. One stuck day falls back to the
+ * template without losing the others; if every call fails, the error is raised so it is retried.
  */
 export async function narratePlan(plan: Plan, model: string, previous: Narrative | null = null): Promise<Narrative> {
   const started = Date.now();
   const rejected: string[] = [];
+  const failed: string[] = [];
+  let attempted = 0;
   const days: DayStory[] = [];
   for (const d of plan.days) {
     if (!d.windows.length && d.freeLeftMinutes === 0) {
@@ -179,8 +204,16 @@ export async function narratePlan(plan: Plan, model: string, previous: Narrative
       previous?.promptVersion === PROMPT_VERSION
         ? previous.days.find((s) => s.date === d.date && s.factsHash === key && s.source === 'gemma')
         : undefined;
-    days.push(reuse ?? (await narrateDay(d, plan.activity, plan.limits, model, rejected)));
+    if (reuse) {
+      days.push(reuse);
+      continue;
+    }
+    attempted++;
+    const { story, error } = await narrateDay(d, plan.activity, plan.limits, model, rejected);
+    if (error) failed.push(`${d.date}: ${error}`);
+    days.push(story);
   }
+  if (attempted > 0 && failed.length === attempted) throw new Error(failed[0].replace(/^[\d-]+: /, ''));
   return {
     hash: plan.hash,
     promptVersion: PROMPT_VERSION,
@@ -189,6 +222,7 @@ export async function narratePlan(plan: Plan, model: string, previous: Narrative
     generatedAt: new Date().toISOString(),
     ms: Date.now() - started,
     rejected,
+    failed,
   };
 }
 
