@@ -96,6 +96,8 @@ export interface Park {
   lon: number;
   distanceKm: number;
   walkMinutes: number;
+  /** Approximate size from the OpenStreetMap bounding box; null when unknown. */
+  areaM2?: number | null;
 }
 
 export interface WindowSummary {

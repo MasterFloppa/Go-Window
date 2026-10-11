@@ -32,6 +32,11 @@ export class BadRequestError extends Error {}
 const PARKS_TTL_MS = 7 * 24 * 3600 * 1000;
 const PARKS_RETRY_MS = 10 * 60 * 1000;
 
+/** Two windows on the same day that share any time are the same outing for check-in purposes. */
+function overlaps(a: { date: string; start: string; end: string }, b: { date: string; start: string; end: string }): boolean {
+  return a.date === b.date && a.start < b.end && b.start < a.end;
+}
+
 export interface FeedbackInput {
   windowId: string;
   went?: boolean | null;
@@ -58,7 +63,8 @@ export class GoWindowService {
   }
 
   private parksKey(lat: number, lon: number) {
-    return `${coarse(lat)},${coarse(lon)}`;
+    // v2: parks carry an approximate size, so older cache entries are refreshed.
+    return `v2:${coarse(lat)},${coarse(lon)}`;
   }
 
   /** Returns cached parks and refreshes them in the background, so a slow Overpass never blocks the plan. */
@@ -99,11 +105,24 @@ export class GoWindowService {
   private recordOffered(plan: Plan): void {
     const offered = this.store.data.offered;
     let changed = false;
+    const started = (w: { date: string; start: string }) => `${w.date}T${w.start}` <= plan.now;
     for (const day of plan.days) {
+      const current = new Set(day.windows.map((w) => w.id));
+      // A window the forecast replaced before it began is no longer something we offered.
+      for (const [id, o] of Object.entries(offered)) {
+        if (o.date === day.date && !current.has(id) && !started(o)) {
+          delete offered[id];
+          changed = true;
+        }
+      }
       for (const w of day.windows) {
         const prev = offered[w.id];
-        // Keep the latest forecast for a window until it starts; after that, freeze what was offered.
-        if (prev && (`${w.date}T${w.start}` <= plan.now || (prev.best === w.best && JSON.stringify(prev.summary) === JSON.stringify(w.summary)))) continue;
+        if (prev) {
+          // Keep the latest forecast for a window until it starts; after that, freeze what was offered.
+          if (started(w) || (prev.best === w.best && JSON.stringify(prev.summary) === JSON.stringify(w.summary))) continue;
+        } else if (started(w) && Object.values(offered).some((o) => started(o) && overlaps(o, w))) {
+          continue;
+        }
         offered[w.id] = { id: w.id, date: w.date, start: w.start, end: w.end, minutes: w.minutes, best: w.best, summary: w.summary };
         changed = true;
       }
@@ -153,9 +172,9 @@ export class GoWindowService {
     const now = this.nowLocal();
     const today = datePart(now);
     const nowMin = toMinutes(now.slice(11, 16));
-    const answered = new Set(this.store.data.feedback.map((f) => f.windowId));
+    const feedback = this.store.data.feedback;
     return Object.values(this.store.data.offered)
-      .filter((w) => w.best && !answered.has(w.id) && w.date >= addDays(today, -3))
+      .filter((w) => w.best && w.date >= addDays(today, -3) && !feedback.some((f) => f.windowId === w.id || overlaps(f, w)))
       .filter((w) => w.date < today || (w.date === today && toMinutes(w.start) <= nowMin))
       .sort((a, b) => (a.id < b.id ? 1 : -1))
       .slice(0, 5);
@@ -183,7 +202,8 @@ export class GoWindowService {
     if (!went) feelings.delete('great');
 
     const s = w.summary;
-    const previous = this.store.data.feedback.find((f) => f.windowId === w.id);
+    const target = w;
+    const previous = this.store.data.feedback.find((f) => f.windowId === target.id || overlaps(f, target));
     const entry: FeedbackEntry = {
       id: previous?.id ?? randomUUID(),
       windowId: w.id,
@@ -215,7 +235,7 @@ export class GoWindowService {
 
     this.store.update((d) => {
       d.learning = state;
-      d.feedback = [...d.feedback.filter((f) => f.windowId !== w.id), entry].slice(-500);
+      d.feedback = [...d.feedback.filter((f) => f !== previous && f.windowId !== target.id), entry].slice(-500);
     });
     return { entry, changes, limits: effectiveLimits(state.base, this.settings.activity, this.settings.sensitive) };
   }

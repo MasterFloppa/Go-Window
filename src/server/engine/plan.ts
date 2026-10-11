@@ -10,6 +10,8 @@ export const PLAN_DAYS = 3;
 const ELSEWHERE_FROM = 5 * 60;
 const ELSEWHERE_TO = 22 * 60;
 const ELSEWHERE_MARGIN = 10;
+/** An open window stays on the plan until fewer than this many minutes are left. */
+const LIVE_MIN_LEFT = 15;
 
 export interface PlanInput {
   settings: Settings;
@@ -19,10 +21,17 @@ export interface PlanInput {
   now?: Date;
 }
 
-function pickPark(w: GoWindow, parks: Park[] | null): Park | null {
+/**
+ * Picks a park you can reach in about a third of the window, favouring bigger ones:
+ * a 2-hour window deserves a real park, not the nearest traffic island with a name.
+ */
+export function pickPark(w: GoWindow, parks: Park[] | null): Park | null {
   if (!parks?.length) return null;
   const budget = Math.max(10, Math.floor(w.minutes / 3));
-  return parks.find((p) => p.walkMinutes <= budget) ?? null;
+  const size = (p: Park) => (p.areaM2 ? Math.min(6, Math.max(2, Math.log10(p.areaM2))) : 2.5);
+  const reachable = parks.filter((p) => p.walkMinutes <= budget);
+  if (!reachable.length) return null;
+  return reachable.reduce((best, p) => (size(p) - p.walkMinutes / 12 > size(best) - best.walkMinutes / 12 ? p : best));
 }
 
 export function buildPlan({ settings, forecast, parks, base, now = new Date() }: PlanInput): Plan {
@@ -49,7 +58,11 @@ export function buildPlan({ settings, forecast, parks, base, now = new Date() }:
     const free = settings.freeHours[wd] ?? [];
     const clip = i === 0 ? nowMin : null;
 
-    const { windows, nearMisses } = findWindows(date, hours, free, minMinutes, clip, true);
+    // Today's windows are found on the full free ranges and then filtered, rather than clipped to "now",
+    // so a window that is already open keeps a stable id (no new check-in or alert every few minutes).
+    const found = findWindows(date, hours, free, minMinutes, null, true);
+    const windows = clip === null ? found.windows : found.windows.filter((w) => toMinutes(w.end) - clip >= LIVE_MIN_LEFT);
+    const nearMisses = clip === null ? found.nearMisses : found.nearMisses.filter((m) => toMinutes(m.end) > clip);
     const best = windows.reduce<GoWindow | null>((b, w) => (!b || w.score > b.score ? w : b), null);
     if (best) best.best = true;
     for (const w of windows) w.park = pickPark(w, parks);

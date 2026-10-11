@@ -15,7 +15,14 @@ interface OverpassElement {
   tags?: Record<string, string>;
   lat?: number;
   lon?: number;
-  center?: { lat: number; lon: number };
+  bounds?: { minlat: number; minlon: number; maxlat: number; maxlon: number };
+}
+
+/** Rough area of a bounding box in m². Good enough to tell a pocket garden from a big park. */
+function boxArea(b: { minlat: number; minlon: number; maxlat: number; maxlon: number }): number {
+  const h = (b.maxlat - b.minlat) * 111_000;
+  const w = (b.maxlon - b.minlon) * 111_000 * Math.cos((((b.minlat + b.maxlat) / 2) * Math.PI) / 180);
+  return Math.max(0, Math.round(h * w));
 }
 
 export function distanceKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -36,7 +43,7 @@ export async function findParks(lat: number, lon: number): Promise<Park[]> {
   relation["leisure"~"^(park|garden|nature_reserve)$"]["name"](around:${RADIUS_M},${la},${lo});
   node["leisure"="park"]["name"](around:${RADIUS_M},${la},${lo});
 );
-out center tags 60;`;
+out bb tags 80;`;
 
   const errors: string[] = [];
   for (const mirror of MIRRORS) {
@@ -74,11 +81,25 @@ async function viaNominatim(lat: number, lon: number): Promise<Park[]> {
     { headers: { 'User-Agent': USER_AGENT }, signal: AbortSignal.timeout(15000) },
   );
   if (!res.ok) throw new Error(`responded ${res.status}`);
-  const rows = (await res.json()) as { name: string; lat: string; lon: string; category: string; type: string }[];
+  const rows = (await res.json()) as {
+    name: string;
+    lat: string;
+    lon: string;
+    category: string;
+    type: string;
+    boundingbox?: [string, string, string, string];
+  }[];
   return toParks(
     rows
       .filter((r) => r.category === 'leisure' && ['park', 'garden', 'nature_reserve'].includes(r.type))
-      .map((r) => ({ tags: { name: r.name, leisure: r.type }, lat: Number(r.lat), lon: Number(r.lon) })),
+      .map((r) => ({
+        tags: { name: r.name, leisure: r.type },
+        lat: Number(r.lat),
+        lon: Number(r.lon),
+        bounds: r.boundingbox
+          ? { minlat: Number(r.boundingbox[0]), maxlat: Number(r.boundingbox[1]), minlon: Number(r.boundingbox[2]), maxlon: Number(r.boundingbox[3]) }
+          : undefined,
+      })),
     lat,
     lon,
   );
@@ -89,19 +110,21 @@ function toParks(elements: OverpassElement[], lat: number, lon: number): Park[] 
   const parks: Park[] = [];
   for (const el of elements) {
     const name = el.tags?.name;
-    const pLat = el.center?.lat ?? el.lat;
-    const pLon = el.center?.lon ?? el.lon;
+    const b = el.bounds;
+    const pLat = el.lat ?? (b ? (b.minlat + b.maxlat) / 2 : undefined);
+    const pLon = el.lon ?? (b ? (b.minlon + b.maxlon) / 2 : undefined);
     if (!name || pLat === undefined || pLon === undefined || seen.has(name)) continue;
     seen.add(name);
     const km = distanceKm(lat, lon, pLat, pLon);
     parks.push({
       name,
       kind: el.tags?.leisure ?? 'park',
-      lat: pLat,
-      lon: pLon,
+      lat: Math.round(pLat * 1e5) / 1e5,
+      lon: Math.round(pLon * 1e5) / 1e5,
       distanceKm: Math.round(km * 10) / 10,
       walkMinutes: Math.max(1, Math.round((km / WALK_KMH) * 60)),
+      areaM2: b && b.maxlat > b.minlat ? boxArea(b) : null,
     });
   }
-  return parks.sort((a, b) => a.distanceKm - b.distanceKm).slice(0, 12);
+  return parks.sort((a, b) => a.distanceKm - b.distanceKm).slice(0, 25);
 }

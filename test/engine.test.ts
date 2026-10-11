@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import type { FeedbackEntry, HourConditions, Settings } from '../src/shared/types.js';
+import type { FeedbackEntry, GoWindow, HourConditions, Park, Settings } from '../src/shared/types.js';
 import { localToEpochSeconds, nowInTimezone } from '../src/shared/time.js';
 import { allowedNumbers, ungroundedNumbers } from '../src/server/ai/grounding.js';
 import { parseByKeywords, verifyFeelings } from '../src/server/ai/feedbackParse.js';
 import { applyFeedback, initialLearning, MAX_STEP } from '../src/server/engine/learn.js';
 import { DEFAULT_LIMITS, effectiveLimits } from '../src/server/engine/limits.js';
-import { buildPlan } from '../src/server/engine/plan.js';
+import { buildPlan, pickPark } from '../src/server/engine/plan.js';
 import { scoreHour } from '../src/server/engine/score.js';
 import { complement, findWindows } from '../src/server/engine/windows.js';
 import { desiredNotifications } from '../src/server/notify/scheduler.js';
@@ -139,10 +139,42 @@ describe('buildPlan', () => {
     expect(monday.windows.every((w) => w.start !== '07:00')).toBe(true);
   });
 
+  it('keeps an open window with a stable id instead of clipping it to now', () => {
+    const at = (iso: string) => buildPlan({ settings, forecast, parks: null, base: DEFAULT_LIMITS, now: new Date(iso) });
+    // 07:20 and 07:45 IST on 2026-10-11 (weekend free slot 07:00-10:00).
+    const a = at('2026-10-11T01:50:00Z').days[0].windows.find((w) => w.best)!;
+    const b = at('2026-10-11T02:15:00Z').days[0].windows.find((w) => w.best)!;
+    expect(a.id).toBe('2026-10-11T07:00-10:00');
+    expect(b.id).toBe(a.id);
+    // With under 15 minutes left it drops off the plan.
+    expect(at('2026-10-11T04:20:00Z').days[0].windows.some((w) => w.id === a.id)).toBe(false);
+  });
+
   it('changes its hash when limits change', () => {
     const a = buildPlan({ settings, forecast, parks: null, base: DEFAULT_LIMITS, now });
     const b = buildPlan({ settings, forecast, parks: null, base: { ...DEFAULT_LIMITS, maxFeels: 28 }, now });
     expect(a.hash).not.toBe(b.hash);
+  });
+});
+
+describe('pickPark', () => {
+  const w = { minutes: 120 } as GoWindow;
+  const park = (name: string, walkMinutes: number, areaM2: number | null): Park => ({
+    name,
+    kind: 'park',
+    lat: 0,
+    lon: 0,
+    distanceKm: walkMinutes / 12,
+    walkMinutes,
+    areaM2,
+  });
+
+  it('prefers a real park a little further away over a tiny nearby one', () => {
+    expect(pickPark(w, [park('traffic island', 4, 900), park('big park', 15, 400_000)])?.name).toBe('big park');
+  });
+
+  it('never picks a park that is too far for the window', () => {
+    expect(pickPark({ minutes: 30 } as GoWindow, [park('far park', 25, 1_000_000)])).toBeNull();
   });
 });
 
