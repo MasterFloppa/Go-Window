@@ -19,7 +19,7 @@ export function ChangeList({ changes }: { changes: LimitChange[] }) {
   );
 }
 
-function CheckinForm({ c, initial, onDone }: { c: Checkin; initial: 'went' | 'skipped' | null; onDone: () => void }) {
+function CheckinForm({ c, initial, onSaved }: { c: Checkin; initial: 'went' | 'skipped' | null; onSaved: (changes: LimitChange[]) => void }) {
   const [went, setWent] = useState<boolean | null>(initial === null ? null : initial === 'went');
   const [feelings, setFeelings] = useState<Feeling[]>([]);
   const [skip, setSkip] = useState<SkipReason | undefined>();
@@ -27,7 +27,6 @@ function CheckinForm({ c, initial, onDone }: { c: Checkin; initial: 'went' | 'sk
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<LimitChange[] | null>(null);
 
   const toggle = (f: Feeling) => setFeelings((cur) => (cur.includes(f) ? cur.filter((x) => x !== f) : [...cur, f]));
 
@@ -43,27 +42,13 @@ function CheckinForm({ c, initial, onDone }: { c: Checkin; initial: 'went' | 'sk
         note: note.trim() || undefined,
         minutes: went ? minutes : undefined,
       });
-      setResult(r.changes);
+      onSaved(r.changes);
     } catch (e) {
       setError((e as Error).message);
     } finally {
       setBusy(false);
     }
   };
-
-  if (result) {
-    return (
-      <div className="stack">
-        <div className="banner ok">Logged. Here is what Go Window learned:</div>
-        <ChangeList changes={result} />
-        <div>
-          <button className="btn small" onClick={onDone}>
-            Done
-          </button>
-        </div>
-      </div>
-    );
-  }
 
   const feelingOptions = went === false ? FEELINGS.filter((f) => f !== 'great') : FEELINGS;
   return (
@@ -136,14 +121,21 @@ export function CheckinCard({
   onChanged: () => void;
 }) {
   const [open, setOpen] = useState<string | null>(launch && launch.response !== 'great' ? launch.id : null);
-  if (!checkins.length) return null;
+  // Answered windows stay here, with what was learned, until "Done", even if a background refresh
+  // has already dropped them from the pending list.
+  const [answered, setAnswered] = useState<{ c: Checkin; changes: LimitChange[] }[]>([]);
+  const rows = [
+    ...answered.map((a) => ({ c: a.c, changes: a.changes as LimitChange[] | null })),
+    ...checkins.filter((c) => !answered.some((a) => a.c.id === c.id)).map((c) => ({ c, changes: null })),
+  ];
+  if (!rows.length) return null;
   return (
     <section className="card">
       <h2>How did it go?</h2>
       <div className="muted small" style={{ marginBottom: 6 }}>
         One tap per window. This is how Go Window learns your real heat, air and rain limits.
       </div>
-      {checkins.map((c) => (
+      {rows.map(({ c, changes }) => (
         <div key={c.id} className="window-row" style={{ display: 'block' }}>
           <div className="spread">
             <div>
@@ -155,23 +147,41 @@ export function CheckinCard({
                 {c.summary.pm25Max === null ? '' : ` · PM2.5 ≤ ${c.summary.pm25Max}`} · humidity {c.summary.humidityMax}%
               </div>
             </div>
-            {open !== c.id && (
+            {!changes && open !== c.id && (
               <button className="btn small" onClick={() => setOpen(c.id)}>
                 Check in
               </button>
             )}
           </div>
-          {open === c.id && (
-            <div style={{ marginTop: 10 }}>
-              <CheckinForm
-                c={c}
-                initial={launch?.id === c.id ? (launch.response === 'skipped' ? 'skipped' : 'went') : null}
-                onDone={() => {
-                  setOpen(null);
-                  onChanged();
-                }}
-              />
+          {changes ? (
+            <div className="stack" style={{ marginTop: 10 }}>
+              <div className="banner ok">Logged. Here is what Go Window learned:</div>
+              <ChangeList changes={changes} />
+              <div>
+                <button
+                  className="btn small"
+                  onClick={() => {
+                    setAnswered((cur) => cur.filter((a) => a.c.id !== c.id));
+                    onChanged();
+                  }}
+                >
+                  Done
+                </button>
+              </div>
             </div>
+          ) : (
+            open === c.id && (
+              <div style={{ marginTop: 10 }}>
+                <CheckinForm
+                  c={c}
+                  initial={launch?.id === c.id ? (launch.response === 'skipped' ? 'skipped' : 'went') : null}
+                  onSaved={(learned) => {
+                    setOpen(null);
+                    setAnswered((cur) => [...cur.filter((a) => a.c.id !== c.id), { c, changes: learned }]);
+                  }}
+                />
+              </div>
+            )
           )}
         </div>
       ))}
