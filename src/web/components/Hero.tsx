@@ -52,9 +52,10 @@ export function NextWindowHero({ plan, narrative, writing }: { plan: Plan; narra
         {w.start}–{w.end}
       </div>
       {/* Template text would repeat the time and chips, so only Gemma's sentence is shown here. */}
-      <div className="hero-head">
-        {w.fallback ? 'Closest slot to your limits' : story?.source === 'gemma' ? story.why : 'Good conditions in your free time'}
-      </div>
+      {(() => {
+        const line = w.fallback ? 'Closest slot to your limits' : story?.source === 'gemma' ? story.why : 'Good conditions in your free time';
+        return <div className={line.length > 70 ? 'hero-sub' : 'hero-head'}>{line}</div>;
+      })()}
       {w.fallback && w.overLimits?.length ? <div className="small hero-over">Over: {w.overLimits.join(' · ')}</div> : null}
       <Conditions w={w} />
       <div className="row" style={{ marginTop: 6 }}>

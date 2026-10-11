@@ -259,47 +259,6 @@ a {
   color: white;
 }
 
-.status-row {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  align-items: center;
-  margin: -6px 0 14px;
-  color: var(--muted);
-  font-size: 0.85rem;
-}
-
-.pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 3px 10px;
-  border-radius: 999px;
-  background: var(--card);
-  border: 1px solid var(--line);
-  font-size: 0.8rem;
-  white-space: nowrap;
-}
-
-.dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--muted);
-}
-
-.dot.ok {
-  background: var(--green-2);
-}
-
-.dot.warn {
-  background: var(--amber);
-}
-
-.dot.bad {
-  background: var(--red);
-}
-
 /* Cards */
 .card {
   background: var(--card);
@@ -369,6 +328,13 @@ a {
   font-size: 1.15rem;
   font-weight: 650;
   margin: 8px 0 4px;
+}
+
+.hero-sub {
+  font-size: 1rem;
+  line-height: 1.45;
+  margin: 8px 0 4px;
+  color: rgba(255, 255, 255, 0.95);
 }
 
 .hero .chips .chip {
@@ -480,35 +446,6 @@ button.chip.on {
 }
 
 /* Days */
-.days {
-  display: grid;
-  gap: 14px;
-}
-
-.day-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 10px;
-}
-
-.day-head h2 {
-  margin: 0;
-}
-
-.badge {
-  font-size: 0.72rem;
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: var(--blue-soft);
-  color: #2b4f86;
-  white-space: nowrap;
-}
-
-.badge.gemma {
-  background: var(--green-soft);
-  color: var(--green);
-}
 
 .story-head {
   font-weight: 650;
@@ -522,13 +459,6 @@ button.chip.on {
   border-radius: 10px;
   background: var(--green-soft);
   font-size: 0.92rem;
-}
-
-.writing {
-  display: inline-block;
-  font-size: 0.8rem;
-  color: var(--muted);
-  animation: pulse 1.4s ease-in-out infinite;
 }
 
 @keyframes pulse {
@@ -567,11 +497,6 @@ button.chip.on {
 
 .hero.fallback {
   background: linear-gradient(135deg, #8a6a1f, #b58a2a 60%, #d6b25a);
-}
-
-.window-row.compact {
-  padding: 6px 12px;
-  font-size: 0.92rem;
 }
 
 .savebar {
@@ -618,22 +543,6 @@ details.card[open] > summary::before {
 .window-time {
   font-weight: 700;
   font-size: 1.05rem;
-}
-
-.miss {
-  padding: 8px 10px;
-  border-radius: 10px;
-  background: var(--amber-soft);
-  font-size: 0.88rem;
-  margin-top: 6px;
-}
-
-.elsewhere {
-  padding: 8px 10px;
-  border-radius: 10px;
-  background: var(--blue-soft);
-  font-size: 0.88rem;
-  margin-top: 6px;
 }
 
 /* Timeline */
@@ -866,26 +775,6 @@ textarea {
 .delta-up {
   color: var(--green);
   font-weight: 700;
-}
-
-/* Receipt */
-.receipt {
-  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
-  background: #fffdf6;
-  border: 1px dashed #d8cfae;
-}
-
-.receipt .big {
-  font-size: 1.7rem;
-  font-weight: 700;
-}
-
-.receipt-line {
-  display: flex;
-  justify-content: space-between;
-  border-bottom: 1px dotted #d8cfae;
-  padding: 4px 0;
-  font-size: 0.9rem;
 }
 
 /* Toasts and banners */
