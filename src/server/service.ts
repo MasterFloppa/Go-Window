@@ -30,6 +30,7 @@ export class NotFoundError extends Error {}
 export class BadRequestError extends Error {}
 
 const PARKS_TTL_MS = 7 * 24 * 3600 * 1000;
+const EMPTY_PARKS_TTL_MS = 15 * 60 * 1000;
 const PARKS_RETRY_MS = 10 * 60 * 1000;
 
 /** Two windows on the same day that share any time are the same outing for check-in purposes. */
@@ -71,7 +72,9 @@ export class GoWindowService {
   private cachedParks(lat: number, lon: number): Park[] | null {
     const key = this.parksKey(lat, lon);
     const hit = this.store.data.parks[key];
-    const stale = !hit || Date.now() - hit.at > PARKS_TTL_MS;
+    // An empty list may just mean the map server had a bad moment; look again soon instead of in a week.
+    const ttl = hit && hit.parks.length === 0 ? EMPTY_PARKS_TTL_MS : PARKS_TTL_MS;
+    const stale = !hit || Date.now() - hit.at > ttl;
     if (stale && !this.parksInFlight && Date.now() - this.parksFailedAt > PARKS_RETRY_MS) {
       this.parksInFlight = findParks(lat, lon)
         .then((parks) => this.store.update((d) => void (d.parks[key] = { at: Date.now(), parks })))

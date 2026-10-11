@@ -58,8 +58,12 @@ out bb tags 80;`;
         signal: AbortSignal.timeout(20000),
       });
       if (!res.ok) throw new Error(`responded ${res.status}`);
-      const json = (await res.json()) as { elements: OverpassElement[] };
-      return toParks(json.elements, la, lo);
+      const json = (await res.json()) as { elements: OverpassElement[]; remark?: string };
+      // Overpass reports its own timeouts as a 200 with an empty result and a remark.
+      if (json.remark && !json.elements?.length) throw new Error(json.remark.slice(0, 120));
+      const parks = toParks(json.elements ?? [], la, lo);
+      if (!parks.length) throw new Error('no named parks in the result');
+      return parks;
     } catch (err) {
       errors.push(`${new URL(mirror).host}: ${(err as Error).message}`);
     }
