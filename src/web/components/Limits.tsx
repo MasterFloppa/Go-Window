@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import type { LimitKey } from '../../shared/types';
 import { client, type LimitsView } from '../api';
+import { isTighter } from '../format';
+import { ChangeList } from './Checkin';
 
 const ORDER: LimitKey[] = ['maxFeels', 'minFeels', 'pm25', 'humidity', 'rainProb', 'uv', 'gust'];
 
@@ -53,7 +55,7 @@ export function LimitsPanel({ limits, onChange }: { limits: LimitsView; onChange
                   {learned !== 0 && (
                     <>
                       {' · '}
-                      <span className={learned < 0 ? 'delta-down' : 'delta-up'}>
+                      <span className={isTighter(key, limits.defaults[key], limits.base[key]) ? 'delta-down' : 'delta-up'}>
                         learned {learned > 0 ? '+' : ''}
                         {Math.round(learned * 10) / 10}
                       </span>
@@ -102,17 +104,7 @@ export function LimitsPanel({ limits, onChange }: { limits: LimitsView; onChange
         {limits.log.length === 0 ? (
           <div className="muted small">Nothing yet. After your first window, tell it how it felt.</div>
         ) : (
-          <ul className="log">
-            {limits.log.map((c, i) => (
-              <li key={i}>
-                <div className="muted small">{new Date(c.at).toLocaleString()}</div>
-                <span className={c.to < c.from ? 'delta-down' : 'delta-up'}>
-                  {c.from} → {c.to}
-                </span>{' '}
-                {c.reason}
-              </li>
-            ))}
-          </ul>
+          <ChangeList changes={limits.log} showWhen />
         )}
       </section>
     </div>

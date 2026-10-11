@@ -1,4 +1,4 @@
-import type { Activity, LimitKey, Limits, Tolerance } from '../../shared/types.js';
+import { LIMIT_TEXT, type Activity, type LimitKey, type Limits, type Tolerance } from '../../shared/types.js';
 
 export const DEFAULT_LIMITS: Limits = {
   minFeels: 12,
@@ -54,15 +54,7 @@ export const TOLERANCE: Record<Tolerance, ToleranceSpec> = {
   relaxed: { heat: 4, cold: 4, pm25Factor: 2, humidity: 12, uv: 3, rainProb: 30, gust: 20, precip: 2 },
 };
 
-export const LIMIT_LABELS: Record<LimitKey, { label: string; unit: string }> = {
-  minFeels: { label: 'Coldest feels-like', unit: '°C' },
-  maxFeels: { label: 'Hottest feels-like', unit: '°C' },
-  pm25: { label: 'PM2.5', unit: 'µg/m³' },
-  rainProb: { label: 'Rain chance', unit: '%' },
-  uv: { label: 'UV index', unit: '' },
-  humidity: { label: 'Humidity', unit: '%' },
-  gust: { label: 'Wind gusts', unit: 'km/h' },
-};
+export const LIMIT_LABELS = LIMIT_TEXT;
 
 export function clampLimit(key: LimitKey, value: number): number {
   const [lo, hi] = LIMIT_BOUNDS[key];

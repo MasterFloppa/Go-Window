@@ -1,4 +1,4 @@
-import type { Activity, Feeling, GoWindow, HourScore, SkipReason, WindowSummary } from '../shared/types';
+import { LIMIT_TEXT, type Activity, type Feeling, type GoWindow, type HourScore, type LimitChange, type LimitKey, type SkipReason, type WindowSummary } from '../shared/types';
 
 export const ACTIVITIES: { id: Activity; label: string; hint: string }[] = [
   { id: 'walk', label: 'Walk', hint: '30+ min' },
@@ -94,4 +94,33 @@ export function downloadIcs(w: GoWindow, timezone: string, activityWord: string)
 
 export function osmLink(lat: number, lon: number): string {
   return `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=17/${lat}/${lon}`;
+}
+
+/** When the walk behind a change happened (or, for manual edits, when the change was made). */
+export function changeWhen(c: LimitChange): string {
+  if (c.when) {
+    const [d, t] = c.when.split('T');
+    return `${shortDate(d)} · ${t}`;
+  }
+  const dt = new Date(c.at);
+  const day = dt.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+  const time = dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+  return `${day} · ${time}`;
+}
+
+/** One clean sentence; older entries looked like "Label: you said … (2026-10-10 07:00)". */
+export function changeReason(c: LimitChange): string {
+  let r = c.reason.replace(/^[A-Z][\w .-]{1,28}:\s+/, '').replace(/\s*\(\d{4}-\d{2}-\d{2} \d{2}:\d{2}\)\s*$/, '').trim();
+  r = r.charAt(0).toUpperCase() + r.slice(1);
+  return /[.!?]$/.test(r) ? r : `${r}.`;
+}
+
+export function limitValue(key: LimitKey, v: number): string {
+  const unit = LIMIT_TEXT[key].unit;
+  return unit === '°C' || unit === '%' ? `${v}${unit}` : unit ? `${v} ${unit}` : `${v}`;
+}
+
+/** Tighter means fewer hours qualify: a lower max, or a higher minimum. */
+export function isTighter(key: LimitKey, from: number, to: number): boolean {
+  return key === 'minFeels' ? to > from : to < from;
 }

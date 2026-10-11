@@ -194,7 +194,7 @@ export function createApp(service: GoWindowService): Hono {
         base: fresh.base,
         log: [
           ...d.learning.log,
-          { at: new Date().toISOString(), key: 'maxFeels', from: d.learning.base.maxFeels, to: fresh.base.maxFeels, reason: 'All limits reset to defaults by you', feedbackId: null },
+          { at: new Date().toISOString(), kind: 'reset', key: 'maxFeels', from: d.learning.base.maxFeels, to: fresh.base.maxFeels, reason: 'All limits reset to defaults.', feedbackId: null },
         ],
       };
     });

@@ -232,13 +232,28 @@ export interface FeedbackEntry {
 }
 
 export interface LimitChange {
+  /** When the change was made. */
   at: string;
+  /** Local start of the walk the change came from ("YYYY-MM-DDTHH:MM"); absent for manual edits and resets. */
+  when?: string;
+  kind?: 'feedback' | 'manual' | 'reset';
   key: LimitKey;
   from: number;
   to: number;
+  /** One plain sentence, e.g. "You said 31°C felt too hot." */
   reason: string;
   feedbackId: string | null;
 }
+
+export const LIMIT_TEXT: Record<LimitKey, { label: string; unit: string }> = {
+  minFeels: { label: 'Coldest feels-like', unit: '°C' },
+  maxFeels: { label: 'Hottest feels-like', unit: '°C' },
+  pm25: { label: 'PM2.5', unit: 'µg/m³' },
+  rainProb: { label: 'Rain chance', unit: '%' },
+  uv: { label: 'UV index', unit: '' },
+  humidity: { label: 'Humidity', unit: '%' },
+  gust: { label: 'Wind gusts', unit: 'km/h' },
+};
 
 export interface LearningState {
   /** Learned personal limits before activity / sensitivity adjustments. */

@@ -1,20 +1,33 @@
 import { useState } from 'react';
-import { FEELINGS, SKIP_REASONS, type Feeling, type LimitChange, type SkipReason } from '../../shared/types';
+import { FEELINGS, LIMIT_TEXT, SKIP_REASONS, type Feeling, type LimitChange, type SkipReason } from '../../shared/types';
 import { client, type Checkin } from '../api';
-import { FEELING_LABELS, SKIP_LABELS, shortDate } from '../format';
+import { changeReason, changeWhen, FEELING_LABELS, isTighter, limitValue, shortDate, SKIP_LABELS } from '../format';
 
-export function ChangeList({ changes }: { changes: LimitChange[] }) {
+export function ChangeList({ changes, showWhen = false }: { changes: LimitChange[]; showWhen?: boolean }) {
   if (!changes.length) return <div className="muted small">No limit changed. Thanks, that still counts toward your receipt.</div>;
   return (
     <ul className="log">
-      {changes.map((c, i) => (
-        <li key={i}>
-          <span className={c.to < c.from ? 'delta-down' : 'delta-up'}>
-            {c.from} → {c.to}
-          </span>{' '}
-          {c.reason}
-        </li>
-      ))}
+      {changes.map((c, i) => {
+        const reset = c.kind === 'reset' || /reset to defaults/i.test(c.reason);
+        return (
+          <li key={i}>
+            {showWhen && <div className="muted small">{changeWhen(c)}</div>}
+            {reset ? (
+              <b>All limits reset to defaults</b>
+            ) : (
+              <>
+                <div>
+                  <b>{LIMIT_TEXT[c.key].label}</b>{' '}
+                  <span className={isTighter(c.key, c.from, c.to) ? 'delta-down' : 'delta-up'}>
+                    {limitValue(c.key, c.from)} → {limitValue(c.key, c.to)}
+                  </span>
+                </div>
+                <div className="small muted">{changeReason(c)}</div>
+              </>
+            )}
+          </li>
+        );
+      })}
     </ul>
   );
 }
