@@ -46,6 +46,151 @@ a {
   padding: 16px 16px 64px;
 }
 
+/* Plan page: one calm column */
+.single {
+  max-width: 680px;
+  margin: 0 auto;
+  display: grid;
+  gap: 14px;
+}
+
+.subline {
+  max-width: 680px;
+  margin: -6px auto 12px;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.linkish {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 2px 0;
+  font-size: 0.85rem;
+}
+
+.linkish:hover {
+  color: var(--green);
+}
+
+.warn-text {
+  color: var(--amber);
+}
+
+.section-title {
+  font-weight: 650;
+  font-size: 0.95rem;
+  margin-bottom: 4px;
+}
+
+.days-card {
+  padding: 12px 18px;
+}
+
+.day-row {
+  border-top: 1px solid var(--line);
+}
+
+.day-row:first-of-type {
+  border-top: 0;
+}
+
+.day-row-head {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr auto 18px;
+  gap: 10px;
+  align-items: center;
+  padding: 12px 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.day-name {
+  font-weight: 600;
+}
+
+.day-summary {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.chev {
+  color: var(--muted);
+}
+
+.day-body {
+  padding: 0 0 14px;
+}
+
+.tag {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--green-soft);
+  color: var(--green);
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+.tag.amber {
+  background: var(--amber-soft);
+  color: #8a5a12;
+}
+
+.tag.light {
+  background: rgba(255, 255, 255, 0.22);
+  color: white;
+}
+
+.reasons {
+  margin-top: 10px;
+}
+
+.reasons ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  font-size: 0.86rem;
+}
+
+.receipt-line-mini {
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.tip ol {
+  margin: 8px 0 0;
+  padding-left: 20px;
+  font-size: 0.9rem;
+}
+
+.hero-kicker {
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.hero-over {
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.hero-writing {
+  margin-top: 6px;
+  font-size: 0.78rem;
+  color: rgba(255, 255, 255, 0.75);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
 /* Header */
 .topbar {
   display: flex;
@@ -54,6 +199,12 @@ a {
   gap: 12px;
   flex-wrap: wrap;
   margin-bottom: 16px;
+}
+
+.topbar.narrow {
+  max-width: 680px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .brand {

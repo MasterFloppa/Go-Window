@@ -1,35 +1,15 @@
 import type { Receipt } from '../../shared/types';
-import { fmtMinutes, shortDate } from '../format';
+import { fmtMinutes } from '../format';
 
-export function ReceiptCard({ receipt }: { receipt: Receipt }) {
+/** One quiet line: the week so far, counted from check-ins. */
+export function ReceiptLine({ receipt }: { receipt: Receipt }) {
+  if (!receipt.windowsTaken && !receipt.skipped) {
+    return <div className="receipt-line-mini">This week: no check-ins yet. After your first walk, tap how it felt.</div>;
+  }
   return (
-    <section className="card receipt">
-      <div className="spread">
-        <b>TOUCH-GRASS RECEIPT</b>
-        <span className="muted small">
-          {shortDate(receipt.from)} – {shortDate(receipt.to)}
-        </span>
-      </div>
-      <div className="big" style={{ margin: '8px 0' }}>
-        {fmtMinutes(receipt.minutesOutside)}
-      </div>
-      <div className="receipt-line">
-        <span>Days outside</span>
-        <span>{receipt.daysOutside} / 7</span>
-      </div>
-      <div className="receipt-line">
-        <span>Windows taken</span>
-        <span>
-          {receipt.windowsTaken} / {Math.max(receipt.windowsOffered, receipt.windowsTaken)}
-        </span>
-      </div>
-      <div className="receipt-line">
-        <span>Skipped</span>
-        <span>{receipt.skipped}</span>
-      </div>
-      <div className="muted small" style={{ marginTop: 8 }}>
-        Counted from your check-ins. Screens off, grass touched.
-      </div>
-    </section>
+    <div className="receipt-line-mini">
+      This week: <b>{fmtMinutes(receipt.minutesOutside)}</b> outside on <b>{receipt.daysOutside}</b> of 7 days
+      {receipt.skipped ? ` · ${receipt.skipped} skipped` : ''}
+    </div>
   );
 }

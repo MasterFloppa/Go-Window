@@ -261,6 +261,21 @@ export function SettingsPanel({
 
       <PhoneAlerts s={s} setS={setS} saved={settings} dirty={dirty} />
       <Advanced s={s} setS={setS} status={status} minDefault={minMinutes[s.activity]} />
+      <details className="card">
+        <summary>
+          <b>About & privacy</b>
+        </summary>
+        <ul className="small" style={{ paddingLeft: 18, margin: '10px 0 0' }}>
+          <li>Weather and air quality come from Open-Meteo (open data), using your location rounded to about 1 km. Parks come from OpenStreetMap.</li>
+          <li>Plain code scores every hour against your limits and keeps only your free hours.</li>
+          <li>
+            {settings.model} runs on this machine through Ollama and only writes the words. If it invents a number, that line is replaced
+            {status?.ollama.up ? '' : ' (Ollama is not reachable right now, so you see plain text)'}.
+          </li>
+          <li>Check-ins move your limits: quickly when something felt bad, slowly when it felt great.</li>
+          <li>Your free hours, check-ins and limits are stored only in this app's data folder.</li>
+        </ul>
+      </details>
     </div>
   );
 }

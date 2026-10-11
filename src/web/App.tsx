@@ -2,18 +2,18 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Receipt, Settings } from '../shared/types';
 import { ApiError, client, launchCheckin, type Checkin, type LimitsView, type PlanResponse, type Status } from './api';
 import { ChangeList, CheckinCard } from './components/Checkin';
-import { DayCard } from './components/DayCard';
+import { DayRow } from './components/DayCard';
 import { NextWindowHero } from './components/Hero';
 import { LimitsPanel } from './components/Limits';
-import { ReceiptCard } from './components/Receipt';
+import { ReceiptLine } from './components/Receipt';
 import { SettingsPanel } from './components/Settings';
 import { Setup } from './components/Setup';
-import { Legend } from './components/Timeline';
 import type { LimitChange } from '../shared/types';
 
 type Tab = 'plan' | 'limits' | 'settings';
 
 const PLAN_REFRESH_MS = 10 * 60 * 1000;
+const TIP_KEY = 'go-window-tip-dismissed';
 
 export function App() {
   const [status, setStatus] = useState<Status | null>(null);
@@ -21,11 +21,14 @@ export function App() {
   const [minMinutes, setMinMinutes] = useState<Record<Settings['activity'], number>>({ walk: 30, run: 30, cycle: 45, kids: 45 });
   const [planRes, setPlanRes] = useState<PlanResponse | null>(null);
   const [writing, setWriting] = useState(false);
-  const [narrateError, setNarrateError] = useState<string | null>(null);
+  // Narration failures fall back to template text silently; the subline flags an offline model.
+  const [, setNarrateError] = useState<string | null>(null);
   const [checkins, setCheckins] = useState<Checkin[]>([]);
   const [limits, setLimits] = useState<LimitsView | null>(null);
   const [receipt, setReceipt] = useState<Receipt | null>(null);
   const [tab, setTab] = useState<Tab>('plan');
+  const [openDay, setOpenDay] = useState<string | null>(null);
+  const [tipDismissed, setTipDismissed] = useState(() => localStorage.getItem(TIP_KEY) === '1');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [quickResult, setQuickResult] = useState<LimitChange[] | null>(null);
@@ -140,16 +143,14 @@ export function App() {
   const plan = planRes?.plan;
   const narrative = planRes?.narrative;
   const ollama = status?.ollama;
+  const isNew = !!receipt && !receipt.windowsTaken && !receipt.skipped;
 
   return (
     <div className="app">
-      <header className="topbar">
+      <header className={`topbar ${tab === 'plan' ? 'narrow' : ''}`}>
         <div className="brand">
           <div className="logo">🌿</div>
-          <div>
-            <h1>Go Window</h1>
-            <small>The best time to go outside, inside the hours you are free.</small>
-          </div>
+          <h1>Go Window</h1>
         </div>
         <nav className="tabs">
           {(['plan', 'limits', 'settings'] as Tab[]).map((t) => (
@@ -160,21 +161,27 @@ export function App() {
         </nav>
       </header>
 
-      <div className="status-row">
-        <span className="pill">📍 {settings.location.name}</span>
-        <span className="pill" title={ollama?.error ?? ollama?.models.join(', ')}>
-          <span className={`dot ${ollama?.hasModel ? 'ok' : ollama?.up ? 'warn' : 'bad'}`} />
-          {ollama?.hasModel ? `${settings.model} on this machine` : ollama?.up ? `${settings.model} not pulled` : 'Ollama offline'}
-        </span>
-        <span className="pill">
-          <span className={`dot ${settings.notify.enabled ? 'ok' : ''}`} />
-          {settings.notify.enabled ? 'Phone alerts on' : 'Phone alerts off'}
-        </span>
-        <button className="btn ghost small" onClick={() => loadPlan(true)} disabled={loading}>
-          {loading ? 'Refreshing…' : '↻ Refresh'}
-        </button>
-        {plan && <span>Updated {new Date(plan.generatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>}
-      </div>
+      {tab === 'plan' && (
+        <div className="subline">
+          <button className="linkish" onClick={() => setTab('settings')} title="Change location">
+            📍 {settings.location.name.split(',')[0]}
+          </button>
+          {!settings.notify.enabled && (
+            <button className="linkish" onClick={() => setTab('settings')} title="Get a nudge on your phone">
+              🔕 alerts off
+            </button>
+          )}
+          {ollama && !ollama.hasModel && (
+            <span className="warn-text" title={ollama.error ?? ''}>
+              {ollama.up ? `${settings.model} not installed` : 'Ollama offline'}, using plain text
+            </span>
+          )}
+          <span style={{ flex: 1 }} />
+          <button className="linkish" onClick={() => loadPlan(true)} disabled={loading} title="Refresh forecast">
+            {loading ? 'refreshing…' : `↻ ${plan ? new Date(plan.generatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}`}
+          </button>
+        </div>
+      )}
 
       {error && (
         <div className="banner error" style={{ marginBottom: 12 }}>
@@ -183,66 +190,61 @@ export function App() {
       )}
 
       {tab === 'plan' && (
-        <div className="grid-2">
-          <div className="stack">
-            {quickResult && (
-              <section className="card">
-                <div className="banner ok" style={{ marginBottom: 8 }}>
-                  Logged: you went and it felt great. 🌿
-                </div>
-                <ChangeList changes={quickResult} />
+        <div className="single">
+          {quickResult && (
+            <section className="card">
+              <div className="banner ok" style={{ marginBottom: 8 }}>
+                Logged: you went and it felt great. 🌿
+              </div>
+              <ChangeList changes={quickResult} />
+            </section>
+          )}
+          <CheckinCard checkins={checkins} launch={launchCheckin} onChanged={() => void loadPlan()} />
+          {plan && narrative ? (
+            <>
+              <NextWindowHero plan={plan} narrative={narrative} writing={writing} />
+              {!plan.airAvailable && <div className="banner">Air-quality forecast is unavailable right now, so this plan uses weather only.</div>}
+              <section className="card days-card">
+                <div className="section-title">Next 3 days</div>
+                {plan.days.map((d) => (
+                  <DayRow
+                    key={d.date}
+                    day={d}
+                    story={narrative.days.find((s) => s.date === d.date)}
+                    timezone={plan.location.timezone}
+                    activity={plan.activity}
+                    open={openDay === d.date}
+                    onToggle={() => setOpenDay((o) => (o === d.date ? null : d.date))}
+                  />
+                ))}
               </section>
-            )}
-            {plan && narrative ? (
-              <>
-                <NextWindowHero plan={plan} narrative={narrative} />
-                {!plan.airAvailable && (
-                  <div className="banner">Air-quality forecast is unavailable right now, so this plan uses weather only. It will retry shortly.</div>
-                )}
-                {narrateError && <div className="banner">{narrateError}</div>}
-                <div className="days">
-                  {plan.days.map((d) => (
-                    <DayCard
-                      key={d.date}
-                      day={d}
-                      story={narrative.days.find((s) => s.date === d.date)}
-                      writing={writing}
-                      timezone={plan.location.timezone}
-                      activity={plan.activity}
-                    />
-                  ))}
-                </div>
-                <Legend />
-              </>
-            ) : (
-              <div className="card empty">{loading ? 'Reading the sky…' : 'No plan yet.'}</div>
-            )}
-          </div>
-
-          <div className="stack">
-            <CheckinCard checkins={checkins} launch={launchCheckin} onChanged={() => void loadPlan()} />
-            {receipt && <ReceiptCard receipt={receipt} />}
-            <details className="card">
-              <summary>
-                <b>How this works</b>
-              </summary>
-              <ul className="small" style={{ paddingLeft: 18, margin: '10px 0 0' }}>
-                <li>Weather and air quality come from Open-Meteo (open data), using your location rounded to about 1 km.</li>
-                <li>Parks come from OpenStreetMap.</li>
-                <li>Plain code scores every hour against <b>your</b> limits and keeps only your free hours.</li>
-                <li>
-                  {settings.model} runs on this machine through Ollama and only writes the words. If it invents a number, that line is
-                  replaced.
-                </li>
-                <li>Check-ins move your limits: quickly when something felt bad, slowly when it felt great.</li>
-              </ul>
-              {plan && !plan.parksAvailable && (
-                <div className="muted small" style={{ marginTop: 6 }}>
-                  Park suggestions are still loading from OpenStreetMap.
-                </div>
+              {receipt && <ReceiptLine receipt={receipt} />}
+              {isNew && !tipDismissed && (
+                <section className="card tip">
+                  <div className="spread">
+                    <b>How it works</b>
+                    <button
+                      className="icon-btn"
+                      aria-label="Dismiss"
+                      onClick={() => {
+                        localStorage.setItem(TIP_KEY, '1');
+                        setTipDismissed(true);
+                      }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  <ol>
+                    <li>Go outside in your window. Turn on phone alerts for a nudge.</li>
+                    <li>Afterwards, tap how it felt (too hot, smoky, great…).</li>
+                    <li>Go Window learns your limits and picks better times.</li>
+                  </ol>
+                </section>
               )}
-            </details>
-          </div>
+            </>
+          ) : (
+            <div className="card empty">{loading ? 'Reading the sky…' : 'No plan yet.'}</div>
+          )}
         </div>
       )}
 

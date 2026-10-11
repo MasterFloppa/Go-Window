@@ -1,6 +1,6 @@
 import type { Activity, DayPlan, DayStory, GoWindow } from '../../shared/types';
 import { downloadIcs, feelsText, fmtMinutes, osmLink, shortDate } from '../format';
-import { Timeline } from './Timeline';
+import { Legend, Timeline } from './Timeline';
 
 const WORD: Record<Activity, string> = { walk: 'walk', run: 'run', cycle: 'ride', kids: 'outdoor play' };
 
@@ -26,32 +26,23 @@ export function Conditions({ w }: { w: GoWindow }) {
 
 export function OverNote({ w }: { w: GoWindow }) {
   if (!w.fallback) return null;
-  return (
-    <div className="over-note">
-      ⚠ Best available: nothing fit all your limits. Over: {(w.overLimits ?? []).join('; ') || 'slightly'}.
-    </div>
-  );
+  return <div className="over-note">⚠ Over your limits: {(w.overLimits ?? []).join('; ') || 'slightly'}</div>;
 }
 
-function CalendarButton({ w, timezone, activity }: { w: GoWindow; timezone: string; activity: Activity }) {
+export function CalendarButton({ w, timezone, activity, label }: { w: GoWindow; timezone: string; activity: Activity; label?: string }) {
   return (
-    <button className="icon-btn" onClick={() => downloadIcs(w, timezone, WORD[activity])} title="Add to calendar" aria-label="Add to calendar">
-      📅
+    <button
+      className={label ? 'btn ghost small' : 'icon-btn'}
+      onClick={() => downloadIcs(w, timezone, WORD[activity])}
+      title="Add to calendar"
+      aria-label="Add to calendar"
+    >
+      📅{label ? ` ${label}` : ''}
     </button>
   );
 }
 
 function WindowRow({ w, timezone, activity }: { w: GoWindow; timezone: string; activity: Activity }) {
-  if (!w.best) {
-    return (
-      <div className="window-row compact">
-        <span>
-          <b>{w.start}–{w.end}</b> <span className="muted small">· {fmtMinutes(w.minutes)} · feels {feelsText(w.summary)}</span>
-        </span>
-        <CalendarButton w={w} timezone={timezone} activity={activity} />
-      </div>
-    );
-  }
   return (
     <div className={`window-row best ${w.fallback ? 'fallback' : ''}`}>
       <div style={{ flex: 1 }}>
@@ -77,67 +68,101 @@ function WindowRow({ w, timezone, activity }: { w: GoWindow; timezone: string; a
   );
 }
 
-export function DayCard({
+export function DayRow({
   day,
   story,
-  writing,
   timezone,
   activity,
+  open,
+  onToggle,
 }: {
   day: DayPlan;
   story: DayStory | undefined;
-  writing: boolean;
   timezone: string;
   activity: Activity;
+  open: boolean;
+  onToggle: () => void;
 }) {
-  const windows = [...day.windows].sort((a, b) => (a.best === b.best ? a.start.localeCompare(b.start) : a.best ? -1 : 1));
+  const best = day.windows.find((w) => w.best);
+  const others = day.windows.filter((w) => !w.best);
+  const summary = best ? (
+    <>
+      <b>
+        {best.start}–{best.end}
+      </b>
+      {best.fallback && <span className="tag amber">best available</span>}
+    </>
+  ) : (
+    <span className="muted">{day.freeLeftMinutes === 0 ? (day.free.length ? 'Free hours done' : 'No free hours set') : 'No good window'}</span>
+  );
+
   return (
-    <section className="card">
-      <div className="day-head">
-        <h2>
+    <div className={`day-row ${open ? 'open' : ''}`}>
+      <button className="day-row-head" onClick={onToggle} aria-expanded={open}>
+        <span className="day-name">
           {day.label} <span className="muted small">{shortDate(day.date)}</span>
-        </h2>
-        {story && (
-          <span className={`badge ${story.source === 'gemma' ? 'gemma' : ''}`} title={story.source === 'gemma' ? 'Written by local Gemma; every number checked against the plan' : 'Plain template text'}>
-            {story.source === 'gemma' ? 'Gemma · checked' : 'template'}
-          </span>
-        )}
-      </div>
+        </span>
+        <span className="day-summary">{summary}</span>
+        <span className="chev" aria-hidden>
+          {open ? '▾' : '▸'}
+        </span>
+      </button>
 
-      {story && (
-        <>
-          <div className="story-head">{story.headline}</div>
-          <div className="muted">{story.why}</div>
-          {story.idea && <div className="idea">🌿 {story.idea}</div>}
-        </>
-      )}
-      {writing && story?.source !== 'gemma' && <div className="writing">Gemma is writing this day…</div>}
+      {open && (
+        <div className="day-body">
+          {story && (
+            <>
+              <div className="story-head">
+                {story.headline}
+                {story.source === 'gemma' && (
+                  <span className="tag" title="Written by Gemma on this machine; every number checked against the plan">
+                    Gemma
+                  </span>
+                )}
+              </div>
+              <div className="muted">{story.why}</div>
+              {story.idea && <div className="idea">🌿 {story.idea}</div>}
+            </>
+          )}
 
-      {windows.map((w) => (
-        <WindowRow key={w.id} w={w} timezone={timezone} activity={activity} />
-      ))}
+          {best && <WindowRow w={best} timezone={timezone} activity={activity} />}
+          {others.length > 0 && (
+            <div className="small" style={{ marginTop: 8 }}>
+              Also good:{' '}
+              {others.map((w, i) => (
+                <span key={w.id}>
+                  {i > 0 && ', '}
+                  <b>
+                    {w.start}–{w.end}
+                  </b>
+                </span>
+              ))}
+            </div>
+          )}
 
-      {day.nearMisses.map((m) => (
-        <div key={`${m.start}-${m.end}`} className="miss">
-          ⛅ Free {m.start}–{m.end}: {m.reason}
+          {day.nearMisses.length > 0 && (
+            <div className="reasons">
+              <div className="muted small">Why not your other free time</div>
+              <ul>
+                {day.nearMisses.map((m) => (
+                  <li key={`${m.start}-${m.end}`}>
+                    {m.start}–{m.end}: {m.reason}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {day.betterElsewhere && (
+            <div className="small" style={{ marginTop: 8 }}>
+              💡 Outside your free hours, <b>{day.betterElsewhere.start}–{day.betterElsewhere.end}</b> looks better, if you can move things.
+            </div>
+          )}
+
+          <Timeline day={day} />
+          <Legend />
         </div>
-      ))}
-
-      {day.betterElsewhere && (
-        <div className="elsewhere">
-          💡 If you can move things: <b>{day.betterElsewhere.start}–{day.betterElsewhere.end}</b> looks better
-          {day.betterElsewhere.park ? ` (${day.betterElsewhere.park.name})` : ''}.
-        </div>
       )}
-
-      {!day.free.length && <div className="muted small">No free hours set for {day.weekday}. Add some in Settings.</div>}
-
-      <Timeline day={day} />
-      {day.sunrise && day.sunset && (
-        <div className="muted small" style={{ marginTop: 4 }}>
-          Sunrise {day.sunrise} · Sunset {day.sunset}
-        </div>
-      )}
-    </section>
+    </div>
   );
 }
